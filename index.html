@@ -1312,7 +1312,9 @@
                                                                 <div className="font-bold text-slate-900">{item.titulo} — {item.perfil}</div>
                                                                 <div className="text-slate-700">Piezas: {item.resumen}</div>
                                                                 <div className="text-slate-700">
-                                                                    {item.titulo === "Correas" ? "Correas de 6m" : "Tubos de 6m"}: {item.plan.totalTubos} u.
+                                                                    {(item.titulo === "Columnas" || item.titulo === "Correas")
+                                                                        ? `${item.titulo === "Correas" ? "Correas" : "Tubos"} de 6m (con sobrantes): ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
+                                                                        : `Tubos de 6m: ${item.plan.totalTubos} u.`}
                                                                 </div>
                                                                 {item.plan.unionesNecesarias > 0 && (
                                                                     <div className="text-slate-700">Uniones necesarias: {item.plan.unionesNecesarias} (solo {item.perfil})</div>
