@@ -1141,8 +1141,7 @@
                 if (scrollContainer) scrollContainer.scrollTop = 0;
                 if (scrollXContainer) {
                     const maxScrollX = Math.max(0, scrollXContainer.scrollWidth - scrollXContainer.clientWidth);
-                    const bias = Math.min(24, Math.floor(maxScrollX * 0.1));
-                    scrollXContainer.scrollLeft = Math.max(0, Math.floor(maxScrollX / 2) - bias);
+                    scrollXContainer.scrollLeft = Math.floor(maxScrollX / 2);
                 }
                 window.scrollTo(0, 0);
 
@@ -1167,7 +1166,7 @@
                 }
 
                 const opt = {
-                    margin:       isMobile ? [6, 6, 6, 6] : [10, 10, 10, 10],
+                    margin:       isMobile ? [6, 8, 6, 8] : [10, 10, 10, 10],
                     filename:     'Cotizacion_Canvas_UP_CONS.pdf',
                     image:        { type: 'jpeg', quality: 1 },
                     html2canvas:  {
