@@ -1136,12 +1136,10 @@
                 const originalWindowY = window.scrollY;
 
                 // 3. Forzamos todas las barras de desplazamiento estrictamente al tope y a la izquierda (0,0).
-                // Esto garantiza que la camara (html2canvas) mire exactamente el inicio del documento
-                // sin capturar espacios en blanco ni empujar los margenes a la derecha.
+                // Esto garantiza que la camara (html2canvas) tome el borde izquierdo real del reporte.
                 if (scrollContainer) scrollContainer.scrollTop = 0;
                 if (scrollXContainer) {
-                    const maxScrollX = Math.max(0, scrollXContainer.scrollWidth - scrollXContainer.clientWidth);
-                    scrollXContainer.scrollLeft = Math.floor(maxScrollX / 2);
+                    scrollXContainer.scrollLeft = 0;
                 }
                 window.scrollTo(0, 0);
 
@@ -1153,16 +1151,28 @@
                 let prevWidth = "";
                 let prevHeight = "";
                 let prevOverflow = "";
+                let prevMarginLeft = "";
+                let prevMarginRight = "";
+                let prevPosition = "";
+                let prevLeft = "";
                 if (reportEl) {
                     prevTransform = reportEl.style.transform || "";
                     prevWidth = reportEl.style.width || "";
                     prevHeight = reportEl.style.height || "";
                     prevOverflow = reportEl.style.overflow || "";
+                    prevMarginLeft = reportEl.style.marginLeft || "";
+                    prevMarginRight = reportEl.style.marginRight || "";
+                    prevPosition = reportEl.style.position || "";
+                    prevLeft = reportEl.style.left || "";
                     reportEl.classList.add('pdf-exporting');
                     reportEl.style.transform = "none";
                     reportEl.style.width = "800px";
                     reportEl.style.height = "auto";
                     reportEl.style.overflow = "visible";
+                    reportEl.style.marginLeft = "auto";
+                    reportEl.style.marginRight = "auto";
+                    reportEl.style.position = "relative";
+                    reportEl.style.left = "0";
                 }
 
                 const opt = {
@@ -1176,7 +1186,7 @@
                         windowHeight: reportEl ? reportEl.scrollHeight : undefined,
                         x: 0,
                         y: 0,
-                        scrollX: scrollXContainer ? -scrollXContainer.scrollLeft : 0,
+                        scrollX: 0,
                         scrollY: 0,
                         backgroundColor: "#ffffff"
                     },
@@ -1195,6 +1205,10 @@
                         reportEl.style.width = prevWidth;
                         reportEl.style.height = prevHeight;
                         reportEl.style.overflow = prevOverflow;
+                        reportEl.style.marginLeft = prevMarginLeft;
+                        reportEl.style.marginRight = prevMarginRight;
+                        reportEl.style.position = prevPosition;
+                        reportEl.style.left = prevLeft;
                     }
                 });
             };
