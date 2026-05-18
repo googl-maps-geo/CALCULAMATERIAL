@@ -42,6 +42,20 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px;}
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .preview-scale {
+            display: inline-block;
+            transform-origin: top center;
+            transform: scale(0.88);
+        }
+
+        @media (max-width: 768px) {
+            .preview-scale { transform: scale(0.76); }
+        }
+
+        .pdf-exporting {
+            transform: none !important;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-800">
@@ -118,6 +132,81 @@
             return { c6, c5, c4, c3 };
         }
 
+        function round2(value) {
+            return Math.round(value * 100) / 100;
+        }
+
+        function resumenPiezas(piezas) {
+            const mapa = {};
+            piezas.forEach((p) => {
+                const key = round2(p).toFixed(2);
+                mapa[key] = (mapa[key] || 0) + 1;
+            });
+            return Object.entries(mapa)
+                .map(([len, count]) => `${count} x ${len}m`)
+                .join(", ");
+        }
+
+        function planCortesPerfil(piezas, kerf, largoStock = 6) {
+            let unionesNecesarias = 0;
+            const segmentos = [];
+            piezas
+                .filter((p) => p > 0)
+                .forEach((len) => {
+                    if (len <= largoStock) {
+                        segmentos.push(len);
+                        return;
+                    }
+                    let restante = len;
+                    while (restante > largoStock + 1e-6) {
+                        segmentos.push(largoStock);
+                        restante -= largoStock;
+                        unionesNecesarias += 1;
+                    }
+                    if (restante > 0) {
+                        segmentos.push(restante);
+                    }
+                });
+
+            const piezasOrdenadas = segmentos.sort((a, b) => b - a);
+
+            const tubos = [];
+            piezasOrdenadas.forEach((len) => {
+                const lenConKerf = len + kerf;
+                let colocado = false;
+                for (const tubo of tubos) {
+                    if (tubo.usado + lenConKerf <= largoStock + 1e-6) {
+                        tubo.piezas.push(len);
+                        tubo.usado += lenConKerf;
+                        colocado = true;
+                        break;
+                    }
+                }
+                if (!colocado) {
+                    tubos.push({ piezas: [len], usado: lenConKerf });
+                }
+            });
+
+            const detalleTubos = tubos.map((t) => {
+                const sobrante = Math.max(0, round2(largoStock - t.usado));
+                return {
+                    piezas: t.piezas.map((p) => round2(p)),
+                    sobrante
+                };
+            });
+
+            const totalSobrante = round2(
+                detalleTubos.reduce((acc, t) => acc + t.sobrante, 0)
+            );
+
+            return {
+                detalleTubos,
+                totalSobrante,
+                totalTubos: detalleTubos.length,
+                unionesNecesarias
+            };
+        }
+
         // --- COMPONENTES CANVAS DEDICADOS ---
 
         const ElevationCanvas = ({ parametros }) => {
@@ -135,14 +224,6 @@
                 const drawLeaderDown = (px, py, tx, ty, text, color = "#0f172a") => {
                     ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
                     const textW = ctx.measureText(text).width;
-                    const textH = 12;
-                    const padX = 4;
-                    const padY = 2;
-                    const boxX = tx - padX;
-                    const boxY = ty - (textH / 2) - padY;
-                    const boxW = textW + (padX * 2);
-                    const boxH = textH + (padY * 2);
-
                     const startX = tx + textW + 6;
                     const startY = ty + 2;
 
@@ -155,8 +236,6 @@
 
                     ctx.beginPath(); ctx.arc(px, py, 2, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
 
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(boxX, boxY, boxW, boxH);
                     ctx.fillStyle = color;
                     ctx.fillText(text, tx, ty);
                 };
@@ -187,6 +266,49 @@
                     ctx.fillText(text, x + 6, (y1 + y2) / 2);
                 };
 
+                const drawDimSlope = (x1, y1, x2, y2, text, color = "#111") => {
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const nx = -dy / len;
+                    const ny = dx / len;
+                    const offset = 10;
+                    const ox1 = x1 + nx * offset;
+                    const oy1 = y1 + ny * offset;
+                    const ox2 = x2 + nx * offset;
+                    const oy2 = y2 + ny * offset;
+                    const arrow = 5;
+
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.8;
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2); ctx.stroke();
+
+                    ctx.beginPath(); ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2); ctx.stroke();
+
+                    const ux = dx / len;
+                    const uy = dy / len;
+                    ctx.beginPath();
+                    ctx.moveTo(ox1, oy1);
+                    ctx.lineTo(ox1 + ux * arrow - uy * 2, oy1 + uy * arrow + ux * 2);
+                    ctx.lineTo(ox1 + ux * arrow + uy * 2, oy1 + uy * arrow - ux * 2);
+                    ctx.closePath(); ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.moveTo(ox2, oy2);
+                    ctx.lineTo(ox2 - ux * arrow - uy * 2, oy2 - uy * arrow + ux * 2);
+                    ctx.lineTo(ox2 - ux * arrow + uy * 2, oy2 - uy * arrow - ux * 2);
+                    ctx.closePath(); ctx.fill();
+
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                    ctx.fillText(text, (ox1 + ox2) / 2, (oy1 + oy2) / 2 - 6);
+                };
+
+                const drawLabel = (x, y, text, color = "#0f172a") => {
+                    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, x, y);
+                };
+
                 if (parametros.tipoTecho === '1') {
                     ctx.fillStyle = '#334155'; ctx.fillRect(150, 50, 15, 150); ctx.fillRect(550, 120, 15, 80);
                     ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
@@ -199,7 +321,12 @@
                     drawDimV(585, 120, 200, `H Min: ${parametros.hBaja}m`, "#333");
                     drawDimH(150, 550, 225, `Caida Base: ${parametros.caida}m`, "#333");
                 } else {
-                    ctx.fillStyle = '#334155'; ctx.fillRect(150, 120, 15, 80); ctx.fillRect(400, 50, 15, 150); ctx.fillRect(650, 120, 15, 80);
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(150, 120, 15, 80);
+                    if (parametros.incluirColumnasCentrales) {
+                        ctx.fillRect(400, 50, 15, 150);
+                    }
+                    ctx.fillRect(650, 120, 15, 80);
                     ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
                     ctx.beginPath(); ctx.moveTo(150, 120); ctx.lineTo(407, 50); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(407, 50); ctx.lineTo(665, 120); ctx.stroke();
@@ -209,12 +336,17 @@
                         const xRight = 407 + (yTensor - 50) * (665 - 407) / (120 - 50);
                         ctx.strokeStyle = '#92400E'; ctx.lineWidth = 4;
                         ctx.beginPath(); ctx.moveTo(xLeft, yTensor); ctx.lineTo(xRight, yTensor); ctx.stroke();
-                        drawLeaderDown(407, yTensor, 430, 70, "Tensor 75x75", "#92400E");
+                        drawLabel(420, 70, "Tensor 75x75", "#92400E");
+                        if (parametros.tensorLongitud > 0) {
+                            drawDimSlope(xLeft, yTensor, xRight, yTensor, `Tensor: ${parametros.tensorLongitud}m`, "#92400E");
+                        }
                     }
                     if (parametros.volado > 0) {
                         ctx.strokeStyle = '#EA580C'; ctx.beginPath(); ctx.moveTo(95, 133); ctx.lineTo(150, 120); ctx.stroke();
                         ctx.beginPath(); ctx.moveTo(665, 120); ctx.lineTo(720, 133); ctx.stroke();
                     }
+                    drawDimSlope(150, 120, 407, 50, `Caida: ${parametros.caida}m`, "#1F2937");
+                    drawDimSlope(407, 50, 665, 120, `Caida: ${parametros.caida}m`, "#1F2937");
                     drawDimV(430, 50, 200, `H Centro Max: ${parametros.hAlta}m`, "#333");
                     drawDimV(135, 120, 200, `H Alero Min: ${parametros.hBaja}m`, "#333");
                     drawDimH(150, 650, 225, `Caida base (Por Lado): ${parametros.caida}m`, "#333");
@@ -225,8 +357,8 @@
                     ? (50 + (120 - 50) * (vigaAnchorX - 140) / (565 - 140))
                     : (120 + (50 - 120) * (vigaAnchorX - 150) / (407 - 150));
 
-                drawLeaderDown(150, 70, 80, 24, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
-                drawLeaderDown(vigaAnchorX, vigaAnchorY, 260, 38, `Viga: ${parametros.perfilViga}`, "#0f172a");
+                drawLabel(70, 24, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
+                drawLabel(260, 38, `Viga: ${parametros.perfilViga}`, "#0f172a");
             }, [parametros]);
             return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
         };
@@ -244,33 +376,10 @@
                 const { numColumnasPorFila, parametros } = resultados;
                 const pasoX = numColumnasPorFila > 1 ? 700 / (numColumnasPorFila - 1) : 350;
 
-                const drawLeaderDown = (px, py, tx, ty, text, color = "#0f172a") => {
+                const drawLabel = (x, y, text, color = "#0f172a") => {
                     ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-                    const textW = ctx.measureText(text).width;
-                    const textH = 12;
-                    const padX = 4;
-                    const padY = 2;
-                    const boxX = tx - padX;
-                    const boxY = ty - (textH / 2) - padY;
-                    const boxW = textW + (padX * 2);
-                    const boxH = textH + (padY * 2);
-
-                    const startX = tx + textW + 6;
-                    const startY = ty + 2;
-
-                    ctx.strokeStyle = color; ctx.lineWidth = 0.8;
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(startX + 10, startY);
-                    ctx.lineTo(px, py);
-                    ctx.stroke();
-
-                    ctx.beginPath(); ctx.arc(px, py, 2, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
-
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(boxX, boxY, boxW, boxH);
                     ctx.fillStyle = color;
-                    ctx.fillText(text, tx, ty);
+                    ctx.fillText(text, x, y);
                 };
 
                 const drawDimH = (x1, x2, y, text, color = "#111") => {
@@ -317,8 +426,8 @@
                 drawDimH(50, 750, 232, `LARGO TOTAL FRONTAL: ${parametros.largo}m`, "#111");
                 drawDimV(25, 40, 200, `${parametros.caida}m`, "#111");
 
-                drawLeaderDown(70, 55, 140, 14, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
-                drawLeaderDown(220, 58, 300, 30, `Vigas: ${parametros.perfilViga}`, "#0f172a");
+                drawLabel(120, 14, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
+                drawLabel(300, 30, `Vigas: ${parametros.perfilViga}`, "#0f172a");
             }, [resultados]);
             return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
         };
@@ -334,35 +443,15 @@
                 ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
 
                 const { numCorreasPorAgua, parametros } = resultados;
-                const pasoY = 160 / Math.max(1, numCorreasPorAgua - 1);
+                const totalCorreasPlano = parametros.tipoTecho === '2'
+                    ? numCorreasPorAgua * 2
+                    : numCorreasPorAgua;
+                const pasoY = 160 / Math.max(1, totalCorreasPlano - 1);
 
-                const drawLeaderDown = (px, py, tx, ty, text, color = "#0f172a") => {
+                const drawLabel = (x, y, text, color = "#0f172a") => {
                     ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-                    const textW = ctx.measureText(text).width;
-                    const textH = 12;
-                    const padX = 4;
-                    const padY = 2;
-                    const boxX = tx - padX;
-                    const boxY = ty - (textH / 2) - padY;
-                    const boxW = textW + (padX * 2);
-                    const boxH = textH + (padY * 2);
-
-                    const startX = tx + textW + 6;
-                    const startY = ty + 2;
-
-                    ctx.strokeStyle = color; ctx.lineWidth = 0.8;
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(startX + 10, startY);
-                    ctx.lineTo(px, py);
-                    ctx.stroke();
-
-                    ctx.beginPath(); ctx.arc(px, py, 2, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
-
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(boxX, boxY, boxW, boxH);
                     ctx.fillStyle = color;
-                    ctx.fillText(text, tx, ty);
+                    ctx.fillText(text, x, y);
                 };
 
                 const drawDimV = (x, y1, y2, text, color = "#1D4ED8") => {
@@ -391,22 +480,23 @@
                     ctx.fillText(text, (x1 + x2) / 2, y - 4);
                 };
 
-                for (let i = 0; i < numCorreasPorAgua; i++) {
+                for (let i = 0; i < totalCorreasPlano; i++) {
                     const y = 40 + (i * pasoY);
                     ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(750, y); ctx.stroke();
-                    if (i < numCorreasPorAgua - 1 && i < 15 && pasoY > 12) {
+                    if (i < totalCorreasPlano - 1 && i < 15 && pasoY > 12) {
                         ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = 1;
                         ctx.beginPath(); ctx.moveTo(35, y); ctx.lineTo(35, y + pasoY); ctx.stroke();
                         drawDimV(30, y, y + pasoY, `${parametros.sepCorreas}m`, "#1D4ED8");
                     }
                 }
                 if (parametros.tipoTecho === '2') {
-                    ctx.fillStyle = '#EF4444'; ctx.globalAlpha = 0.7; ctx.fillRect(50, 117, 700, 6); ctx.globalAlpha = 1.0;
+                    const yCumbrera = 40 + (160 / 2);
+                    ctx.fillStyle = '#EF4444'; ctx.globalAlpha = 0.7; ctx.fillRect(50, yCumbrera - 3, 700, 6); ctx.globalAlpha = 1.0;
                 }
                 drawDimH(50, 750, 225, `Ancho cubierto: ${parametros.largo}m`, "#111");
 
-                drawLeaderDown(70, 52, 110, 16, `Correas: ${parametros.perfilCorrea}`, "#0f172a");
+                drawLabel(110, 16, `Correas: ${parametros.perfilCorrea}`, "#0f172a");
             }, [resultados]);
             return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
         };
@@ -484,6 +574,19 @@
                     let y = pY + (i * stepH);
                     if(y > pY + pH) y = pY + pH;
                     ctx.beginPath(); ctx.moveTo(pX, y); ctx.lineTo(pX + pW, y); ctx.stroke();
+                }
+
+                if (Array.isArray(parametros.cortesPlanchas) && parametros.cortesPlanchas.length > 0) {
+                    ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+                    parametros.cortesPlanchas.forEach((corte) => {
+                        const y = pY + (corte / parametros.caida) * pH;
+                        ctx.beginPath(); ctx.moveTo(pX, y); ctx.lineTo(pX + pW, y); ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#1d4ed8"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+                        ctx.fillText("Union de plancha", pX + 6, y - 2);
+                        ctx.setLineDash([6, 4]);
+                    });
+                    ctx.setLineDash([]);
                 }
 
                 drawDimH(pX, pX + pW, pY + pH + 18, `Ancho total: ${parametros.largo}m`, "#7c2d12");
@@ -649,7 +752,8 @@
                 perfilCorrea: "Correa Tipo G 80x40 en 2mm"
             });
 
-            const previewCaida = Math.max(0, Number(params.caida) || 0);
+            const previewCaidaRaw = Math.max(0, Number(params.caida) || 0);
+            const previewCaida = params.tipoTecho === '2' ? previewCaidaRaw / 2 : previewCaidaRaw;
             const previewHBaja = Math.max(0, Number(params.hBaja) || 0);
             const previewPendiente = Math.max(0, Number(params.pendientePercent) || 0);
             const previewHAltaAuto = previewHBaja + (previewCaida * previewPendiente / 100);
@@ -686,9 +790,6 @@
                     const vHBaja = Math.max(0, Number(params.hBaja) || 0);
                     const vPendiente = Math.max(0, Number(params.pendientePercent) || 0);
                     let vHAlta = Math.max(0.1, Number(params.hAlta) || 0.1);
-                    if (params.usarPendienteAuto) {
-                        vHAlta = Math.max(vHBaja, vHBaja + (vCaida * vPendiente / 100));
-                    }
                     const vSepColumnas = Math.max(0.1, Number(params.sepColumnas) || 3.5);
                     const vSepCorreas = Math.max(0.1, Number(params.sepCorreas) || 0.8);
 
@@ -696,7 +797,12 @@
                     const incluirColumnasCentrales = dosAguas && params.incluirColumnasCentrales && vLargo > 10;
                     const requiereParTensor = dosAguas && !incluirColumnasCentrales;
 
-                    const longitudInclinada = vCaida;
+                    const vCaidaPorLado = dosAguas ? vCaida / 2 : vCaida;
+                    if (params.usarPendienteAuto) {
+                        vHAlta = Math.max(vHBaja, vHBaja + (vCaidaPorLado * vPendiente / 100));
+                    }
+
+                    const longitudInclinada = vCaidaPorLado;
                     const longitudTotalCaida = longitudInclinada + vVolado;
 
                     const esMetal = params.tipoCobertura === "metal";
@@ -713,6 +819,16 @@
                     comboTejas.forEach(t => { desgloseTejas[t] = (desgloseTejas[t] || 0) + anchoTejas; });
                     if (dosAguas) { for (let key in desgloseTejas) desgloseTejas[key] *= 2; }
 
+                    const cortesPlanchas = [];
+                    if (comboTejas.length > 1) {
+                        let acumulado = 0;
+                        for (let i = 0; i < comboTejas.length - 1; i++) {
+                            acumulado += comboTejas[i];
+                            const posicion = Math.max(0, acumulado - traslapeVertical * (i + 1));
+                            cortesPlanchas.push(posicion);
+                        }
+                    }
+
                     const totalPlanchas = Object.values(desgloseTejas).reduce((a, b) => a + b, 0);
 
                     let cumbreros = dosAguas ? Math.ceil(vLargo / anchoUtil) : 0;
@@ -728,7 +844,6 @@
                     let metrosLinealesColumnas = dosAguas
                         ? (numColumnasPorFila * vHBaja * 2) + (incluirColumnasCentrales ? (numColumnasPorFila * vHAlta) : 0)
                         : (numColumnasPorFila * vHBaja) + (numColumnasPorFila * vHAlta);
-                    const tubosColumnas = calcularTubos6m(metrosLinealesColumnas);
 
                     const perfilVigaFinal = requiereParTensor
                         ? "Tubo 75x75 en 2mm (par + tensor)"
@@ -737,16 +852,15 @@
                     const longitudViga = longitudTotalCaida;
                     let metrosLinealesVigas = longitudViga * numColumnasPorFila;
                     if (dosAguas) metrosLinealesVigas *= 2;
+                    let tensorLongitud = 0;
                     if (usarParTensor) {
-                        const tensorLongitud = vCaida * 2;
+                        tensorLongitud = 1.5;
                         metrosLinealesVigas = ((longitudViga * 2) + tensorLongitud) * numColumnasPorFila;
                     }
-                    const tubosVigas = calcularTubos6m(metrosLinealesVigas);
 
                     const numCorreasPorAgua = Math.ceil(longitudTotalCaida / vSepCorreas) + 1;
                     let metrosLinealesCorreas = numCorreasPorAgua * vLargo;
                     if (dosAguas) metrosLinealesCorreas *= 2;
-                    const tubosCorreas = calcularTubos6m(metrosLinealesCorreas);
 
                     const metrosLinealesVigaUnion = params.incluirVigaUnion
                         ? vLargo * numFilasColumnasProfundidad
@@ -754,6 +868,86 @@
                     const tubosVigaUnion = params.incluirVigaUnion
                         ? calcularTubos6m(metrosLinealesVigaUnion)
                         : 0;
+
+                    const kerf = 0.0;
+                    const piezasColumnas = [];
+                    if (dosAguas) {
+                        for (let i = 0; i < numColumnasPorFila * 2; i++) piezasColumnas.push(vHBaja);
+                        if (incluirColumnasCentrales) {
+                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
+                        }
+                    } else {
+                        for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHBaja);
+                        for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
+                    }
+
+                    const piezasVigas = [];
+                    if (usarParTensor) {
+                        for (let i = 0; i < numColumnasPorFila * 2; i++) piezasVigas.push(longitudViga);
+                        for (let i = 0; i < numColumnasPorFila; i++) piezasVigas.push(tensorLongitud);
+                    } else {
+                        const totalVigas = dosAguas ? numColumnasPorFila * 2 : numColumnasPorFila;
+                        for (let i = 0; i < totalVigas; i++) piezasVigas.push(longitudViga);
+                    }
+
+                    const piezasCorreas = [];
+                    const totalCorreas = dosAguas ? numCorreasPorAgua * 2 : numCorreasPorAgua;
+                    for (let i = 0; i < totalCorreas; i++) piezasCorreas.push(vLargo);
+
+                    const piezasVigaUnion = [];
+                    if (params.incluirVigaUnion) {
+                        for (let i = 0; i < numFilasColumnasProfundidad; i++) piezasVigaUnion.push(vLargo);
+                    }
+
+                    const cortesDetalle = [
+                        {
+                            titulo: "Columnas",
+                            perfil: params.perfilColumna,
+                            piezas: piezasColumnas
+                        },
+                        {
+                            titulo: "Vigas principales",
+                            perfil: perfilVigaFinal,
+                            piezas: piezasVigas
+                        },
+                        params.incluirVigaUnion ? {
+                            titulo: "Viga de union",
+                            perfil: params.perfilVigaUnion,
+                            piezas: piezasVigaUnion
+                        } : null,
+                        {
+                            titulo: "Correas",
+                            perfil: params.perfilCorrea,
+                            piezas: piezasCorreas
+                        }
+                    ].filter(Boolean).map((item) => {
+                        const plan = planCortesPerfil(item.piezas, kerf, 6);
+                        const stockRecuperables = Math.floor(plan.totalSobrante / 6);
+                        const sobranteRestante = round2(plan.totalSobrante - (stockRecuperables * 6));
+                        return {
+                            ...item,
+                            resumen: resumenPiezas(item.piezas),
+                            plan,
+                            stockRecuperables,
+                            sobranteRestante
+                        };
+                    });
+
+                    const planColumnas = cortesDetalle.find((item) => item.titulo === "Columnas");
+                    const planVigas = cortesDetalle.find((item) => item.titulo === "Vigas principales");
+                    const planCorreas = cortesDetalle.find((item) => item.titulo === "Correas");
+                    const planVigaUnion = cortesDetalle.find((item) => item.titulo === "Viga de union");
+
+                    const tubosColumnas = planColumnas ? planColumnas.plan.totalTubos : 0;
+                    const tubosVigas = planVigas ? planVigas.plan.totalTubos : 0;
+                    const tubosCorreas = planCorreas ? planCorreas.plan.totalTubos : 0;
+                    const tubosVigaUnionPlan = planVigaUnion ? planVigaUnion.plan.totalTubos : tubosVigaUnion;
+                    const tubosColumnasConSobrantes = planColumnas
+                        ? Math.max(0, planColumnas.plan.totalTubos - planColumnas.stockRecuperables)
+                        : tubosColumnas;
+                    const tubosCorreasConSobrantes = planCorreas
+                        ? Math.max(0, planCorreas.plan.totalTubos - planCorreas.stockRecuperables)
+                        : tubosCorreas;
 
                     let canalesDetalle = null;
                     if (params.incluirCanales) {
@@ -779,23 +973,29 @@
                     setResultados({
                         desgloseTejas, totalTornillos, tubosColumnas, tubosVigas, tubosCorreas,
                         totalColumnasNum, numCorreasPorAgua, cumbreros, canalesDetalle, numColumnasPorFila,
-                        tubosVigaUnion,
+                        tubosVigaUnion: tubosVigaUnionPlan,
+                        tubosColumnasConSobrantes,
+                        tubosCorreasConSobrantes,
                         longitudInclinada: longitudTotalCaida,
                         recomendaciones,
+                        cortesDetalle,
+                        kerfCorte: kerf,
                         parametros: {
-                            largo: vLargo, caida: vCaida, volado: vVolado, hBaja: vHBaja, hAlta: vHAlta,
+                            largo: vLargo, caida: vCaidaPorLado, volado: vVolado, hBaja: vHBaja, hAlta: vHAlta,
                             sepColumnas: vSepColumnas, sepCorreas: vSepCorreas,
                             tipoTecho: params.tipoTecho, incluirCanales: params.incluirCanales,
                             incluirColumnasCentrales,
                             pendientePercent: vPendiente, usarPendienteAuto: params.usarPendienteAuto,
                             incluirVigaUnion: params.incluirVigaUnion, perfilVigaUnion: params.perfilVigaUnion,
                             perfilColumna: params.perfilColumna, perfilViga: perfilVigaFinal, perfilCorrea: params.perfilCorrea,
+                            tensorLongitud,
                             tipoCobertura: params.tipoCobertura,
                             coberturaNombre,
                             coberturaAnchoPlancha: anchoPlancha,
                             coberturaAnchoUtil: anchoUtil,
                             coberturaTraslapeOndas: traslapeOndas,
-                            coberturaTraslapeVertical: traslapeVertical
+                            coberturaTraslapeVertical: traslapeVertical,
+                            cortesPlanchas
                         }
                     });
 
@@ -834,6 +1034,9 @@
                 // 4. Pausa para permitir al celular redibujar la pantalla en la coordenada 0,0.
                 await new Promise(resolve => setTimeout(resolve, renderDelay));
 
+                const reportEl = document.getElementById('reporte-pdf');
+                if (reportEl) reportEl.classList.add('pdf-exporting');
+
                 const opt = {
                     margin:       isMobile ? [6, 6, 6, 6] : [10, 10, 10, 10],
                     filename:     'Cotizacion_Canvas_UP_CONS.pdf',
@@ -858,6 +1061,7 @@
                     if (scrollContainer) scrollContainer.scrollTop = originalScrollY;
                     if (scrollXContainer) scrollXContainer.scrollLeft = originalScrollX;
                     window.scrollTo(0, originalWindowY);
+                    if (reportEl) reportEl.classList.remove('pdf-exporting');
                 });
             };
 
@@ -882,7 +1086,10 @@
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div><label className="label-pro">Largo Frontal (m)</label><input type="number" step="any" name="largo" value={params.largo} onChange={handleChange} className="input-pro" /></div>
-                                    <div><label className="label-pro">Caida (m)</label><input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="input-pro" /></div>
+                                    <div>
+                                        <label className="label-pro">{params.tipoTecho === '2' ? 'Caida Total (m)' : 'Caida (m)'}</label>
+                                        <input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="input-pro" />
+                                    </div>
                                     <div><label className="label-pro">Volado (m)</label><input type="number" step="any" name="volado" value={params.volado} onChange={handleChange} className="input-pro" /></div>
                                     <div><label className="label-pro">Pendiente (%)</label><input type="number" step="any" name="pendientePercent" value={params.pendientePercent} onChange={handleChange} className="input-pro" /></div>
                                     <div>
@@ -1060,7 +1267,7 @@
                                 <div className="w-full overflow-x-auto rounded-lg shadow-2xl custom-scrollbar flex justify-center md:block md:w-auto">
 
                                     {/* CAJA ESTRICTA DE 800PX PARA CAPTURA PDF PERFECTA */}
-                                    <div id="reporte-pdf" ref={reportRef} className="bg-white p-8 sm:p-10" style={{ width: '800px', minWidth: '800px', minHeight: '1131px', boxSizing: 'border-box' }}>
+                                    <div id="reporte-pdf" ref={reportRef} className="bg-white p-8 sm:p-10 preview-scale" style={{ width: '800px', minWidth: '800px', minHeight: '1131px', boxSizing: 'border-box' }}>
 
                                         {/* MEMBRETE y MATERIALES */}
                                         <div className="evitar-corte" style={{ pageBreakInside: 'avoid' }}>
@@ -1079,6 +1286,64 @@
                                             </div>
 
                                             <div className="mb-6">
+                                                <div className="bg-slate-800 text-white px-3 py-1.5 font-bold uppercase text-sm mb-3 flex items-center">
+                                                    Detalle de Cortes y Uniones
+                                                </div>
+                                                <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-[12px] text-slate-800">
+                                                    <p className="mb-2">
+                                                        Tolerancia de corte aplicada: <span className="font-bold">{resultados.kerfCorte} m</span> por pieza.
+                                                        Uniones permitidas solo entre perfiles iguales: columnas con columnas, vigas con vigas,
+                                                        correas con correas y viga de union con viga de union.
+                                                    </p>
+                                                    <p className="mb-2">
+                                                        Recomendacion: se puede soldar en columnas (carga vertical). En vigas de apoyo se
+                                                        prefiere pieza entera, evitando soldadura en la luz principal.
+                                                    </p>
+                                                    {resultados.parametros.tipoTecho === '2' && (
+                                                        <p className="mb-2">
+                                                            En 2 aguas, la caida total ingresada se divide por lado.
+                                                            Caida total: <span className="font-bold">{round2(resultados.parametros.caida * 2)} m</span> →
+                                                            caida por lado: <span className="font-bold">{round2(resultados.parametros.caida)} m</span>.
+                                                        </p>
+                                                    )}
+                                                    <div className="space-y-3">
+                                                        {resultados.cortesDetalle.map((item, idx) => (
+                                                            <div key={`corte-${idx}`} className="border border-slate-200 rounded-md p-2 bg-white">
+                                                                <div className="font-bold text-slate-900">{item.titulo} — {item.perfil}</div>
+                                                                <div className="text-slate-700">Piezas: {item.resumen}</div>
+                                                                <div className="text-slate-700">
+                                                                    {item.titulo === "Correas" ? "Correas de 6m" : "Tubos de 6m"}: {item.plan.totalTubos} u.
+                                                                </div>
+                                                                {item.plan.unionesNecesarias > 0 && (
+                                                                    <div className="text-slate-700">Uniones necesarias: {item.plan.unionesNecesarias} (solo {item.perfil})</div>
+                                                                )}
+                                                                <div className="mt-1 text-slate-700">
+                                                                    {item.plan.detalleTubos.map((t, tIdx) => (
+                                                                        <div key={`tubo-${idx}-${tIdx}`}>
+                                                                            {item.titulo === "Correas" ? "Correa" : "Tubo"} #{tIdx + 1}: {t.piezas.join(" + ")} m — Sobrante: {t.sobrante} m
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && item.stockRecuperables > 0 && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        Sobrantes unibles: {item.stockRecuperables} x 6 m — Sobrante restante: {item.sobranteRestante} m
+                                                                    </div>
+                                                                )}
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && item.stockRecuperables > 0 && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        {item.titulo === "Correas" ? "Correas" : "Columnas"} nuevas requeridas con sobrantes: {Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.
+                                                                    </div>
+                                                                )}
+                                                                <div className="mt-1 text-slate-700 font-semibold">
+                                                                    Sobrante total: {item.plan.totalSobrante} m (unible solo con {item.perfil})
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-6">
                                                 <div className="bg-blue-900 text-white px-3 py-1.5 font-bold uppercase text-sm mb-3 flex items-center">
                                                     Listado de Materiales y Perfiles
                                                 </div>
@@ -1088,7 +1353,7 @@
                                                         <ul className="space-y-2 text-sm text-gray-700">
                                                             <li className="flex justify-between items-center border-b border-gray-200 pb-1">
                                                                 <span className="font-medium">{resultados.parametros.perfilColumna}</span>
-                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosColumnas} tubos (6m)</span>
+                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosColumnasConSobrantes} tubos (6m) <span className="text-[10px] text-slate-500">(con sobrantes)</span></span>
                                                             </li>
                                                             <li className="flex justify-between items-center border-b border-gray-200 pb-1">
                                                                 <span className="font-medium">{resultados.parametros.perfilViga}</span>
@@ -1102,7 +1367,7 @@
                                                             )}
                                                             <li className="flex justify-between items-center pb-1">
                                                                 <span className="font-medium">{resultados.parametros.perfilCorrea}</span>
-                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosCorreas} tubos (6m)</span>
+                                                                <span className="font-bold bg-white px-2 py-1 border border-gray-300 rounded text-blue-800">{resultados.tubosCorreasConSobrantes} correas (6m) <span className="text-[10px] text-slate-500">(con sobrantes)</span></span>
                                                             </li>
                                                         </ul>
                                                     </div>
@@ -1244,7 +1509,7 @@
                                                         <td className="border border-gray-300 px-2 py-1">Correas</td>
                                                         <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilCorrea}</td>
                                                         <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosCorreas}</td>
-                                                        <td className="border border-gray-300 px-2 py-1">tubos de 6m</td>
+                                                        <td className="border border-gray-300 px-2 py-1">correas de 6m</td>
                                                     </tr>
                                                     {Object.entries(resultados.desgloseTejas).map(([medida, cantidad]) => (
                                                         <tr key={`teja-detalle-${medida}`}>
