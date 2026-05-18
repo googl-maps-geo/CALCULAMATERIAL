@@ -199,11 +199,20 @@
                 detalleTubos.reduce((acc, t) => acc + t.sobrante, 0)
             );
 
+            const sobrantesMap = {};
+            detalleTubos.forEach((t) => {
+                if (t.sobrante > 0) {
+                    const key = round2(t.sobrante).toFixed(2);
+                    sobrantesMap[key] = (sobrantesMap[key] || 0) + 1;
+                }
+            });
+
             return {
                 detalleTubos,
                 totalSobrante,
                 totalTubos: detalleTubos.length,
-                unionesNecesarias
+                unionesNecesarias,
+                sobrantesMap
             };
         }
 
@@ -374,7 +383,26 @@
                 ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
 
                 const { numColumnasPorFila, parametros } = resultados;
-                const pasoX = numColumnasPorFila > 1 ? 700 / (numColumnasPorFila - 1) : 350;
+                const segmentosCount = Math.max(1, numColumnasPorFila - 1);
+                const sepBase = parametros.dividirColumnas
+                    ? parametros.sepColumnasUsada
+                    : parametros.sepColumnas;
+                const segmentos = [];
+                for (let i = 0; i < segmentosCount; i++) {
+                    if (parametros.dividirColumnas) {
+                        segmentos.push(sepBase);
+                    } else if (i < segmentosCount - 1) {
+                        segmentos.push(sepBase);
+                    } else {
+                        const last = Math.max(0.1, round2(parametros.largo - sepBase * (segmentosCount - 1)));
+                        segmentos.push(last);
+                    }
+                }
+
+                const posiciones = [0];
+                segmentos.forEach((len) => {
+                    posiciones.push(round2(posiciones[posiciones.length - 1] + len));
+                });
 
                 const drawLabel = (x, y, text, color = "#0f172a") => {
                     ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
@@ -409,7 +437,7 @@
                 };
 
                 for (let i = 0; i < numColumnasPorFila; i++) {
-                    const x = 50 + (i * pasoX);
+                    const x = 50 + ((posiciones[i] / parametros.largo) * 700);
                     ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 4;
                     ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, 200); ctx.stroke();
                     ctx.fillStyle = '#000000'; ctx.fillRect(x - 5, 35, 10, 10); ctx.fillRect(x - 5, 195, 10, 10);
@@ -417,10 +445,17 @@
 
                     if (i < numColumnasPorFila - 1) {
                         ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
-                        ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x + pasoX, 20); ctx.stroke();
+                        const nextX = 50 + ((posiciones[i + 1] / parametros.largo) * 700);
+                        ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(nextX, 20); ctx.stroke();
                         ctx.beginPath(); ctx.moveTo(x, 15); ctx.lineTo(x, 25); ctx.stroke();
-                        ctx.beginPath(); ctx.moveTo(x + pasoX, 15); ctx.lineTo(x + pasoX, 25); ctx.stroke();
-                        drawDimH(x, x + pasoX, 20, `${parametros.sepColumnas}m`, "#111");
+                        ctx.beginPath(); ctx.moveTo(nextX, 15); ctx.lineTo(nextX, 25); ctx.stroke();
+
+                        const mostrarTodo = segmentosCount <= 8;
+                        const esUltimo = i === segmentosCount - 1;
+                        const mostrar = mostrarTodo || esUltimo;
+                        if (mostrar) {
+                            drawDimH(x, nextX, 20, `${round2(segmentos[i])}m`, "#111");
+                        }
                     }
                 }
                 drawDimH(50, 750, 232, `LARGO TOTAL FRONTAL: ${parametros.largo}m`, "#111");
@@ -543,6 +578,23 @@
                     ctx.fillText(text, x + 6, (y1 + y2) / 2);
                 };
 
+                const drawPlanchaDims = (x, y, h) => {
+                    if (!Array.isArray(parametros.planchasCombo) || parametros.planchasCombo.length === 0) return;
+                    const segmentos = [];
+                    let start = 0;
+                    parametros.planchasCombo.forEach((len, idx) => {
+                        const end = start + len;
+                        segmentos.push([start, end]);
+                        start = end - (idx < parametros.planchasCombo.length - 1 ? parametros.coberturaTraslapeVertical : 0);
+                    });
+
+                    segmentos.forEach(([s, e], idx) => {
+                        const y1 = y + (s / parametros.caida) * h;
+                        const y2 = y + (e / parametros.caida) * h;
+                        drawDimV(x, y1, y2, `${parametros.planchasCombo[idx]}m`, "#9a3412");
+                    });
+                };
+
                 ctx.font = "bold 11px sans-serif"; ctx.fillStyle = "#c2410c"; ctx.textAlign = "left";
                 ctx.fillText("MODULACION EN PLANTA (PLANCHAS)", 60, 20);
                 ctx.fillText("CORTE Y DETALLE DE LA ONDA (ESPANOLA)", 420, 20);
@@ -592,8 +644,11 @@
                     ctx.beginPath(); ctx.moveTo(pX, pY + halfH); ctx.lineTo(pX + pW, pY + halfH); ctx.stroke();
                     ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#dc2626"; ctx.textAlign = "left";
                     ctx.fillText("Cumbrera", pX + 6, pY + halfH - 4);
+                    drawPlanchaDims(pX + pW + 10, pY, halfH);
+                    drawPlanchaDims(pX + pW + 10, pY + halfH, halfH);
                 } else {
                     drawPlanta(pX, pY, pW, pH, "");
+                    drawPlanchaDims(pX + pW + 10, pY, pH);
                 }
 
                 if (Array.isArray(parametros.cortesPlanchas) && parametros.cortesPlanchas.length > 0) {
@@ -770,6 +825,7 @@
                 tipoCobertura: "teja",
                 incluirColumnasCentrales: true,
                 incluirCanales: true,
+                dividirColumnas: false,
                 incluirVigaUnion: false,
                 perfilVigaUnion: "Tubo 80x40 en 2mm",
                 perfilColumna: "Tubo 100x100 en 2mm",
@@ -865,6 +921,9 @@
                         : 2;
                     const numColumnasPorFila = Math.ceil(vLargo / vSepColumnas) + 1;
                     const totalColumnasNum = numColumnasPorFila * numFilasColumnasProfundidad;
+                    const sepColumnasUsada = params.dividirColumnas && numColumnasPorFila > 1
+                        ? round2(vLargo / (numColumnasPorFila - 1))
+                        : vSepColumnas;
 
                     let metrosLinealesColumnas = dosAguas
                         ? (numColumnasPorFila * vHBaja * 2) + (incluirColumnasCentrales ? (numColumnasPorFila * vHAlta) : 0)
@@ -1016,6 +1075,8 @@
                             sepColumnas: vSepColumnas, sepCorreas: vSepCorreas,
                             tipoTecho: params.tipoTecho, incluirCanales: params.incluirCanales,
                             incluirColumnasCentrales,
+                            dividirColumnas: params.dividirColumnas,
+                            sepColumnasUsada,
                             pendientePercent: vPendiente, usarPendienteAuto: params.usarPendienteAuto,
                             incluirVigaUnion: params.incluirVigaUnion, perfilVigaUnion: params.perfilVigaUnion,
                             perfilColumna: params.perfilColumna, perfilViga: perfilVigaFinal, perfilCorrea: params.perfilCorrea,
@@ -1026,7 +1087,8 @@
                             coberturaAnchoUtil: anchoUtil,
                             coberturaTraslapeOndas: traslapeOndas,
                             coberturaTraslapeVertical: traslapeVertical,
-                            cortesPlanchas
+                            cortesPlanchas,
+                            planchasCombo: comboTejas
                         }
                     });
 
@@ -1217,6 +1279,16 @@
                                     <div><label className="label-pro">Sep. Columnas (m)</label><input type="number" step="any" name="sepColumnas" value={params.sepColumnas} onChange={handleChange} className="input-pro" /></div>
                                     <div><label className="label-pro">Sep. Correas (m)</label><input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="input-pro" /></div>
                                 </div>
+                                <div className="pt-2">
+                                    <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                        <div className="relative">
+                                            <input type="checkbox" name="dividirColumnas" checked={params.dividirColumnas} onChange={handleChange} className="sr-only" />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${params.dividirColumnas ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.dividirColumnas ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Dividir columnas en tramos iguales</div>
+                                    </label>
+                                </div>
                                 <div className="pt-2 space-y-3">
                                     <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
                                         <div className="relative">
@@ -1364,16 +1436,31 @@
                                                                         ));
                                                                     })()}
                                                                 </div>
-                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && item.stockRecuperables > 0 && (
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && Object.keys(item.plan.sobrantesMap || {}).length > 0 && (
                                                                     <div className="mt-1 text-slate-700">
-                                                                        Sobrantes unibles: {item.stockRecuperables} x {round2(item.recoveryUnit)} m — Sobrante restante: {item.sobranteRestante} m
+                                                                        {Object.entries(item.plan.sobrantesMap).map(([lenStr, count]) => {
+                                                                            const len = Number(lenStr);
+                                                                            const totalLen = round2(len * count);
+                                                                            const ratio = item.recoveryUnit / len;
+                                                                            const ratioInt = Math.abs(ratio - Math.round(ratio)) < 1e-6 ? Math.round(ratio) : null;
+                                                                            const unidades = Math.floor(totalLen / item.recoveryUnit);
+                                                                            const sobranteFinal = round2(totalLen - (unidades * item.recoveryUnit));
+                                                                            return (
+                                                                                <div key={`sobrante-${idx}-${lenStr}`}>
+                                                                                    Sobrantes: {count} x {lenStr} m. {unidades > 0
+                                                                                        ? (ratioInt
+                                                                                            ? `Unir ${ratioInt} piezas de ${lenStr} m -> ${unidades} ${item.titulo === "Correas" ? "correas" : "columnas"} de ${round2(item.recoveryUnit)} m.`
+                                                                                            : `Unir sobrantes hasta ${round2(item.recoveryUnit)} m -> ${unidades} ${item.titulo === "Correas" ? "correas" : "columnas"}.`)
+                                                                                        : "No alcanza para una pieza completa."}
+                                                                                    {sobranteFinal > 0 ? ` Sobrante restante: ${sobranteFinal} m.` : ""}
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                 )}
                                                                 {(item.titulo === "Columnas" || item.titulo === "Correas") && item.stockRecuperables > 0 && (
-                                                                    <div className="mt-1 text-slate-700">
-                                                                        {item.titulo === "Correas"
-                                                                            ? `Correas nuevas requeridas con sobrantes: ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
-                                                                            : `Columnas nuevas requeridas con sobrantes: ${Math.max(0, item.totalPiezas - item.stockRecuperables)} u.`}
+                                                                    <div className="mt-1 text-slate-700 font-semibold">
+                                                                        Total piezas formadas por sobrantes: {item.stockRecuperables} u.
                                                                     </div>
                                                                 )}
                                                                 <div className="mt-1 text-slate-700 font-semibold">
