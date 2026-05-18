@@ -1139,7 +1139,10 @@
                 // Esto garantiza que la camara (html2canvas) mire exactamente el inicio del documento
                 // sin capturar espacios en blanco ni empujar los margenes a la derecha.
                 if (scrollContainer) scrollContainer.scrollTop = 0;
-                if (scrollXContainer) scrollXContainer.scrollLeft = 0;
+                if (scrollXContainer) {
+                    const maxScrollX = Math.max(0, scrollXContainer.scrollWidth - scrollXContainer.clientWidth);
+                    scrollXContainer.scrollLeft = Math.floor(maxScrollX / 2);
+                }
                 window.scrollTo(0, 0);
 
                 // 4. Pausa para permitir al celular redibujar la pantalla en la coordenada 0,0.
@@ -1173,7 +1176,7 @@
                         windowHeight: reportEl ? reportEl.scrollHeight : undefined,
                         x: 0,
                         y: 0,
-                        scrollX: 0,
+                        scrollX: scrollXContainer ? -scrollXContainer.scrollLeft : 0,
                         scrollY: 0,
                         backgroundColor: "#ffffff"
                     },
