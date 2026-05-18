@@ -1463,8 +1463,13 @@
                                                                         Total piezas formadas por sobrantes: {item.stockRecuperables} u.
                                                                     </div>
                                                                 )}
+                                                                {(item.titulo === "Columnas" || item.titulo === "Correas") && (
+                                                                    <div className="mt-1 text-slate-700">
+                                                                        Sobrante util para unir: {round2(item.stockRecuperables * item.recoveryUnit)} m. Sobrante restante: {item.sobranteRestante} m.
+                                                                    </div>
+                                                                )}
                                                                 <div className="mt-1 text-slate-700 font-semibold">
-                                                                    Sobrante total: {item.plan.totalSobrante} m (unible solo con {item.perfil})
+                                                                    Sobrante total generado: {item.plan.totalSobrante} m (unible solo con {item.perfil})
                                                                 </div>
                                                             </div>
                                                         ))}
