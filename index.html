@@ -43,18 +43,19 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        .preview-scale {
-            display: inline-block;
-            transform-origin: top center;
-            transform: scale(0.88);
-        }
-
-        @media (max-width: 768px) {
-            .preview-scale { transform: scale(0.76); }
-        }
-
         .pdf-exporting {
             transform: none !important;
+        }
+
+        .plan-block {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            padding-top: 2px;
+        }
+
+        .plan-block--page {
+            page-break-before: always;
+            break-before: page;
         }
     </style>
 </head>
@@ -842,6 +843,23 @@
             const [resultados, setResultados] = useState(null);
             const reportRef = useRef(null);
 
+            useEffect(() => {
+                const updatePreviewScale = () => {
+                    const reportEl = reportRef.current;
+                    if (!reportEl) return;
+                    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+                    const padding = 24;
+                    const baseWidth = 800;
+                    const scale = isMobile ? Math.min(1, (window.innerWidth - padding) / baseWidth) : 1;
+                    reportEl.style.transformOrigin = "top center";
+                    reportEl.style.transform = `scale(${scale})`;
+                };
+
+                updatePreviewScale();
+                window.addEventListener("resize", updatePreviewScale);
+                return () => window.removeEventListener("resize", updatePreviewScale);
+            }, [resultados]);
+
             const permiteColumnasCentrales = Number(params.largo) > 10;
             const columnasCentralesActivas = params.tipoTecho === '2' && permiteColumnasCentrales && params.incluirColumnasCentrales;
             const requiereParTensorUI = params.tipoTecho === '2' && !columnasCentralesActivas;
@@ -1128,7 +1146,21 @@
                 await new Promise(resolve => setTimeout(resolve, renderDelay));
 
                 const reportEl = document.getElementById('reporte-pdf');
-                if (reportEl) reportEl.classList.add('pdf-exporting');
+                let prevTransform = "";
+                let prevWidth = "";
+                let prevHeight = "";
+                let prevOverflow = "";
+                if (reportEl) {
+                    prevTransform = reportEl.style.transform || "";
+                    prevWidth = reportEl.style.width || "";
+                    prevHeight = reportEl.style.height || "";
+                    prevOverflow = reportEl.style.overflow || "";
+                    reportEl.classList.add('pdf-exporting');
+                    reportEl.style.transform = "none";
+                    reportEl.style.width = "800px";
+                    reportEl.style.height = "auto";
+                    reportEl.style.overflow = "visible";
+                }
 
                 const opt = {
                     margin:       isMobile ? [6, 6, 6, 6] : [10, 10, 10, 10],
@@ -1137,8 +1169,8 @@
                     html2canvas:  {
                         scale: pixelRatio,
                         useCORS: true,
-                        width: 800,
-                        windowWidth: 800,
+                        windowWidth: reportEl ? reportEl.scrollWidth : 800,
+                        windowHeight: reportEl ? reportEl.scrollHeight : undefined,
                         x: 0,
                         y: 0,
                         scrollX: 0,
@@ -1146,7 +1178,7 @@
                         backgroundColor: "#ffffff"
                     },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['css', 'legacy'], avoid: '.evitar-corte' }
+                    pagebreak:    { mode: ['css', 'legacy'], avoid: '.evitar-corte, .plan-block' }
                 };
 
                 // 5. Generamos el PDF y restauramos el scroll a donde estaba el usuario.
@@ -1154,7 +1186,13 @@
                     if (scrollContainer) scrollContainer.scrollTop = originalScrollY;
                     if (scrollXContainer) scrollXContainer.scrollLeft = originalScrollX;
                     window.scrollTo(0, originalWindowY);
-                    if (reportEl) reportEl.classList.remove('pdf-exporting');
+                    if (reportEl) {
+                        reportEl.classList.remove('pdf-exporting');
+                        reportEl.style.transform = prevTransform;
+                        reportEl.style.width = prevWidth;
+                        reportEl.style.height = prevHeight;
+                        reportEl.style.overflow = prevOverflow;
+                    }
                 });
             };
 
@@ -1370,7 +1408,7 @@
                                 <div className="w-full overflow-x-auto rounded-lg shadow-2xl custom-scrollbar flex justify-center md:block md:w-auto">
 
                                     {/* CAJA ESTRICTA DE 800PX PARA CAPTURA PDF PERFECTA */}
-                                    <div id="reporte-pdf" ref={reportRef} className="bg-white p-8 sm:p-10 preview-scale" style={{ width: '800px', minWidth: '800px', minHeight: '1131px', boxSizing: 'border-box' }}>
+                                    <div id="reporte-pdf" ref={reportRef} className="bg-white p-8 sm:p-10" style={{ width: '800px', minWidth: '800px', minHeight: '1131px', boxSizing: 'border-box' }}>
 
                                         {/* MEMBRETE y MATERIALES */}
                                         <div className="evitar-corte" style={{ pageBreakInside: 'avoid' }}>
@@ -1575,38 +1613,32 @@
                                         </div>
 
                                         {/* PLANO 1 (Elevacion) */}
-                                        <div className="evitar-corte border border-gray-300 rounded p-3 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                        <div className="evitar-corte plan-block border border-gray-300 rounded p-2 shadow-sm bg-white mb-3" style={{ pageBreakInside: 'avoid' }}>
                                             <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 1: Elevacion Estructural Lateral</h4>
                                             <ElevationCanvas parametros={resultados.parametros} />
                                         </div>
 
-                                        {/* Forzar siempre Salto a la Pagina 2 Aqui */}
-                                        <div className="html2pdf__page-break" style={{ pageBreakBefore: 'always', margin: 0, padding: 0 }}></div>
-
                                         {/* PLANO 2 (Vigas) */}
-                                        <div className="evitar-corte border border-gray-300 rounded p-3 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                        <div className="evitar-corte plan-block plan-block--page border border-gray-300 rounded p-2 shadow-sm bg-white mb-3" style={{ pageBreakInside: 'avoid' }}>
                                             <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 2: Planta de Vigas Principales y Columnas</h4>
                                             <ColumnsVigasCanvas resultados={resultados} />
                                         </div>
 
                                         {/* PLANO 3 (Correas) */}
-                                        <div className="evitar-corte border border-gray-300 rounded p-3 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                        <div className="evitar-corte plan-block plan-block--page border border-gray-300 rounded p-2 shadow-sm bg-white mb-3" style={{ pageBreakInside: 'avoid' }}>
                                             <h4 className="font-bold text-gray-800 text-xs mb-2 uppercase">Plano 3: Distribucion de Correas Longitudinales</h4>
                                             <CorreasCanvas resultados={resultados} />
                                         </div>
 
-                                        {/* Forzar siempre Salto a la Pagina 3 Aqui */}
-                                        <div className="html2pdf__page-break" style={{ pageBreakBefore: 'always', margin: 0, padding: 0 }}></div>
-
                                         {/* PLANO 4 (Tejas) */}
-                                        <div className="evitar-corte border border-orange-300 rounded p-3 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                        <div className="evitar-corte plan-block plan-block--page border border-orange-300 rounded p-2 shadow-sm bg-white mb-3" style={{ pageBreakInside: 'avoid' }}>
                                             <h4 className="font-bold text-orange-800 text-xs mb-2 uppercase">Plano 4: Distribucion de Teja Espanola y Detalles Constructivos</h4>
                                             <TejasCanvas resultados={resultados} />
                                         </div>
 
                                         {/* PLANO 5 (Canales) - Si aplica */}
                                         {resultados.parametros.incluirCanales && (
-                                            <div className="evitar-corte border border-blue-200 rounded p-3 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="evitar-corte plan-block plan-block--page border border-blue-200 rounded p-2 shadow-sm bg-white mb-3" style={{ pageBreakInside: 'avoid' }}>
                                                 <h4 className="font-bold text-blue-900 text-xs mb-2 uppercase">Plano 5: Recorrido e Instalacion de Canales</h4>
                                                 <CanalesCanvas resultados={resultados} />
                                             </div>
