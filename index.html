@@ -225,7 +225,7 @@
                 const canvas = canvasRef.current;
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                canvas.width = 800; canvas.height = 250;
+                canvas.width = 800; canvas.height = 210;
                 ctx.clearRect(0, 0, 800, 250);
 
                 ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 3;
@@ -379,7 +379,7 @@
                 const canvas = canvasRef.current;
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                canvas.width = 800; canvas.height = 250;
+                canvas.width = 800; canvas.height = 210;
                 ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, 800, 250);
                 ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
 
@@ -474,7 +474,7 @@
                 const canvas = canvasRef.current;
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                canvas.width = 800; canvas.height = 250;
+                canvas.width = 800; canvas.height = 210;
                 ctx.fillStyle = '#f0f9ff'; ctx.fillRect(0, 0, 800, 250);
                 ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 1; ctx.strokeRect(50, 40, 700, 160);
 
@@ -543,7 +543,7 @@
                 const canvas = canvasRef.current;
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                canvas.width = 800; canvas.height = 250;
+                canvas.width = 800; canvas.height = 210;
 
                 ctx.fillStyle = '#fffaf0';
                 ctx.fillRect(0, 0, 800, 250);
@@ -1141,7 +1141,8 @@
                 if (scrollContainer) scrollContainer.scrollTop = 0;
                 if (scrollXContainer) {
                     const maxScrollX = Math.max(0, scrollXContainer.scrollWidth - scrollXContainer.clientWidth);
-                    scrollXContainer.scrollLeft = Math.floor(maxScrollX / 2);
+                    const bias = Math.min(24, Math.floor(maxScrollX * 0.1));
+                    scrollXContainer.scrollLeft = Math.max(0, Math.floor(maxScrollX / 2) - bias);
                 }
                 window.scrollTo(0, 0);
 
