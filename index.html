@@ -875,6 +875,8 @@
                 incluirColumnasCentrales1Agua: false,
                 numColumnasCaida: "3",
                 numColumnasLargo: "",
+                pitonesCustom: "",
+                ganchosCustom: "",
                 incluirColumnasCentrales: true,
                 incluirCanales: true,
                 incluirVigaUnion: false,
@@ -941,8 +943,11 @@
                 setActivePlanConfig(prev => (prev === key ? null : key));
             };
 
-            const handleFloatingMouseDown = (e) => {
+            const handleFloatingPointerDown = (e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
+                if (e.currentTarget.setPointerCapture) {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                }
                 dragOffsetRef.current = {
                     x: e.clientX - rect.left,
                     y: e.clientY - rect.top
@@ -992,11 +997,13 @@
                         dragTimerRef.current = null;
                     }
                 };
-                window.addEventListener('mousemove', handleMove);
-                window.addEventListener('mouseup', handleUp);
+                window.addEventListener('pointermove', handleMove);
+                window.addEventListener('pointerup', handleUp);
+                window.addEventListener('pointercancel', handleUp);
                 return () => {
-                    window.removeEventListener('mousemove', handleMove);
-                    window.removeEventListener('mouseup', handleUp);
+                    window.removeEventListener('pointermove', handleMove);
+                    window.removeEventListener('pointerup', handleUp);
+                    window.removeEventListener('pointercancel', handleUp);
                 };
             }, [isDragging]);
 
@@ -1212,12 +1219,14 @@
                     if (params.incluirCanales) {
                         const longitudCanalesA_Cubrir = dosAguas ? vLargo * 2 : vLargo;
                         const piezas = calcularCanales(vLargo);
+                        const vPitonesCustom = Math.max(0, Math.floor(Number(params.pitonesCustom) || 0));
+                        const vGanchosCustom = Math.max(0, Math.floor(Number(params.ganchosCustom) || 0));
                         if(dosAguas){ piezas.c6 *= 2; piezas.c5 *= 2; piezas.c4 *= 2; piezas.c3 *= 2; }
                         canalesDetalle = {
                             ...piezas,
                             tapas: dosAguas ? 4 : 2,
-                            pitones: dosAguas ? 2 : 1,
-                            ganchos: Math.ceil(longitudCanalesA_Cubrir / 2) + (dosAguas ? 2 : 1)
+                            pitones: vPitonesCustom > 0 ? vPitonesCustom : (dosAguas ? 2 : 1),
+                            ganchos: vGanchosCustom > 0 ? vGanchosCustom : (Math.ceil(longitudCanalesA_Cubrir / 2) + (dosAguas ? 2 : 1))
                         };
                     }
 
@@ -1629,8 +1638,8 @@
                         <button
                             onClick={handleFloatingClick}
                             aria-label="Procesar calculo estructural"
-                            onMouseDown={handleFloatingMouseDown}
-                            onMouseUp={() => {
+                            onPointerDown={handleFloatingPointerDown}
+                            onPointerUp={() => {
                                 if (dragTimerRef.current) {
                                     clearTimeout(dragTimerRef.current);
                                     dragTimerRef.current = null;
@@ -2044,6 +2053,12 @@
                                                     <div className="absolute top-8 right-2 z-10 w-52 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                         <div className="font-bold text-slate-700 mb-2">Configurar canales</div>
                                                         <label className="flex items-center gap-2"><input type="checkbox" name="incluirCanales" checked={params.incluirCanales} onChange={handleChange} /> Incluir canales</label>
+                                                        <label className="flex flex-col mt-2">Pitones bajantes
+                                                            <input type="number" step="1" min="0" name="pitonesCustom" value={params.pitonesCustom} onChange={handleChange} className="border rounded px-2 py-1" />
+                                                        </label>
+                                                        <label className="flex flex-col mt-2">Soportes / ganchos
+                                                            <input type="number" step="1" min="0" name="ganchosCustom" value={params.ganchosCustom} onChange={handleChange} className="border rounded px-2 py-1" />
+                                                        </label>
                                                         <div className="mt-3 flex justify-end">
                                                             <button
                                                                 onClick={() => setActivePlanConfig(null)}
