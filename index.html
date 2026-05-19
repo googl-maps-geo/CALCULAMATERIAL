@@ -73,10 +73,10 @@
         const ANCHO_PLANCHA_TEJA = 1.05;
         const TRASLAPE_ONDAS_TEJA = 0.10;
 
-        const METALES_DISPONIBLES = [6.0, 5.0, 4.20, 4.0, 3.0];
+        const METALES_DISPONIBLES = [6.0, 5.0, 4.20, 4.0, 3.60, 3.0, 2.40];
         const TRASLAPE_VERTICAL_METAL = 0.20;
         const ANCHO_PLANCHA_METAL = 1.10;
-        const TRASLAPE_ONDAS_METAL = 0.05;
+        const TRASLAPE_ONDAS_METAL = 0.10;
         const ANCHO_UTIL_METAL = ANCHO_PLANCHA_METAL - TRASLAPE_ONDAS_METAL;
 
         function optimizarPlanchas(longitud, longitudesDisponibles, traslapeVertical) {
@@ -597,6 +597,11 @@
                 ctx.strokeRect(50, 30, 700, 200);
 
                 const { parametros } = resultados;
+                const esMetal = parametros.tipoCobertura === "metal";
+                const colorBase = esMetal ? "#CBD5E1" : "#ea580c";
+                const colorBorde = esMetal ? "#94a3b8" : "#7c2d12";
+                const colorGrid = esMetal ? "#cbd5e1" : "#c2410c";
+                const colorTexto = esMetal ? "#334155" : "#7c2d12";
 
                 const drawDimH = (x1, x2, y, text, color = "#9a3412") => {
                     const arrow = 4;
@@ -641,11 +646,11 @@
                     });
                 };
 
-                ctx.font = "bold 11px sans-serif"; ctx.fillStyle = "#c2410c"; ctx.textAlign = "left";
+                ctx.font = "bold 11px sans-serif"; ctx.fillStyle = colorGrid; ctx.textAlign = "left";
                 ctx.fillText("MODULACION EN PLANTA (PLANCHAS)", 60, 20);
-                ctx.fillText("CORTE Y DETALLE DE LA ONDA (ESPANOLA)", 420, 20);
+                ctx.fillText(esMetal ? "CORTE Y DETALLE DE LA ONDA (METAL)" : "CORTE Y DETALLE DE LA ONDA (ESPANOLA)", 420, 20);
 
-                ctx.font = "bold 10px sans-serif"; ctx.fillStyle = "#7c2d12"; ctx.textAlign = "left";
+                ctx.font = "bold 10px sans-serif"; ctx.fillStyle = colorTexto; ctx.textAlign = "left";
                 ctx.fillText(`${parametros.coberturaNombre}: ancho util ${parametros.coberturaAnchoUtil}m`, 60, 36);
 
                 ctx.strokeStyle = "#fed7aa"; ctx.lineWidth = 2;
@@ -654,13 +659,13 @@
                 const pX = 60; const pY = 45; const pW = 300; const pH = 160;
 
                 const drawPlanta = (x, y, w, h, label) => {
-                    ctx.fillStyle = "#ea580c"; ctx.globalAlpha = 0.6;
+                    ctx.fillStyle = colorBase; ctx.globalAlpha = esMetal ? 0.5 : 0.6;
                     ctx.fillRect(x, y, w, h);
                     ctx.globalAlpha = 1.0;
 
                     const numPlanchasAncho = Math.ceil(parametros.largo / 0.95);
                     const colW = w / (parametros.largo / 0.95);
-                    ctx.strokeStyle = "#7c2d12"; ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = colorBorde; ctx.lineWidth = 1.5;
                     for(let i=0; i<=numPlanchasAncho; i++) {
                         let colX = x + (i * colW);
                         if(colX > x + w) colX = x + w;
@@ -669,7 +674,7 @@
 
                     const numEscalones = Math.ceil(parametros.caida / 0.20);
                     const stepH = h / (parametros.caida / 0.20);
-                    ctx.strokeStyle = "#c2410c"; ctx.lineWidth = 0.5;
+                    ctx.strokeStyle = colorGrid; ctx.lineWidth = 0.5;
                     for(let i=0; i<=numEscalones; i++) {
                         let rowY = y + (i * stepH);
                         if(rowY > y + h) rowY = y + h;
@@ -677,7 +682,7 @@
                     }
 
                     if (label) {
-                        ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#7c2d12"; ctx.textAlign = "left";
+                        ctx.font = "bold 9px sans-serif"; ctx.fillStyle = colorTexto; ctx.textAlign = "left";
                         ctx.fillText(label, x + 6, y + 12);
                     }
                 };
@@ -710,45 +715,73 @@
                     ctx.setLineDash([]);
                 }
 
-                drawDimH(pX, pX + pW, pY + pH + 18, `Ancho total: ${parametros.largo}m`, "#7c2d12");
+                drawDimH(pX, pX + pW, pY + pH + 18, `Ancho total: ${parametros.largo}m`, colorTexto);
                 if (parametros.tipoTecho === '2') {
-                    drawDimV(pX - 20, pY, pY + (pH / 2), `${parametros.caida}m`, "#7c2d12");
-                    drawDimV(pX - 20, pY + (pH / 2), pY + pH, `${parametros.caida}m`, "#7c2d12");
+                    drawDimV(pX - 20, pY, pY + (pH / 2), `${parametros.caida}m`, colorTexto);
+                    drawDimV(pX - 20, pY + (pH / 2), pY + pH, `${parametros.caida}m`, colorTexto);
                 } else {
-                    drawDimV(pX - 20, pY, pY + pH, `${parametros.caida}m`, "#7c2d12");
+                    drawDimV(pX - 20, pY, pY + pH, `${parametros.caida}m`, colorTexto);
                 }
 
                 const dX = 420; const dY = 110;
                 const dW = 300;
 
                 ctx.font = "bold 9px sans-serif"; ctx.fillStyle = "#431407"; ctx.textAlign="left";
-                ctx.fillText("CORTE TRANSVERSAL (7 Ondas Altas, 6 Concavas)", dX, 45);
+                ctx.fillText(esMetal ? "CORTE TRANSVERSAL (6 Ondas)" : "CORTE TRANSVERSAL (7 Ondas Altas, 6 Concavas)", dX, 45);
+
+                const drawMetalWave = (startX, startY, width, highOffset, lowOffset, waveCount) => {
+                    const totalSegs = waveCount * 2;
+                    const segW = width / totalSegs;
+                    ctx.moveTo(startX, startY);
+                    for (let i = 0; i < totalSegs; i++) {
+                        const segStart = startX + (i * segW);
+                        const segEnd = segStart + segW;
+                        const isHigh = (i % 2 === 0);
+                        const topY = isHigh ? (startY - highOffset) : (startY + lowOffset);
+                        ctx.lineTo(segStart + (segW * 0.15), startY);
+                        ctx.lineTo(segStart + (segW * 0.2), topY);
+                        ctx.lineTo(segStart + (segW * 0.8), topY);
+                        ctx.lineTo(segStart + (segW * 0.85), startY);
+                        ctx.lineTo(segEnd, startY);
+                    }
+                };
 
                 ctx.strokeStyle = "#ea580c"; ctx.lineWidth = 3;
                 ctx.beginPath();
-
-                const segW = dW / 13;
-                ctx.moveTo(dX, dY);
-                for(let i=0; i<13; i++) {
-                    let isHigh = (i % 2 === 0);
-                    let startX = dX + (i * segW);
-                    let endX = startX + segW;
-                    let cpX = startX + (segW/2);
-                    let cpY = isHigh ? dY - 25 : dY + 5;
-                    ctx.quadraticCurveTo(cpX, cpY, endX, dY);
+                if (esMetal) {
+                    drawMetalWave(dX, dY, dW, 16, 6, 6);
+                } else {
+                    const segW = dW / 13;
+                    ctx.moveTo(dX, dY);
+                    for(let i=0; i<13; i++) {
+                        let isHigh = (i % 2 === 0);
+                        let startX = dX + (i * segW);
+                        let endX = startX + segW;
+                        let cpX = startX + (segW/2);
+                        let cpY = isHigh ? dY - 25 : dY + 5;
+                        ctx.quadraticCurveTo(cpX, cpY, endX, dY);
+                    }
                 }
                 ctx.stroke();
 
                 ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
                 ctx.beginPath();
-                ctx.moveTo(dX + (11 * segW), dY - 5);
-                for(let i=11; i<14; i++) {
-                    let isHigh = (i % 2 === 0);
-                    let startX = dX + (i * segW) - 2;
-                    let endX = startX + segW;
-                    let cpX = startX + (segW/2);
-                    let cpY = isHigh ? (dY - 5) - 25 : (dY - 5) + 5;
-                    ctx.quadraticCurveTo(cpX, cpY, endX, dY - 5);
+                if (esMetal) {
+                    const segs = 12;
+                    const segWMetal = dW / segs;
+                    const overlayStart = dX + (10 * segWMetal);
+                    drawMetalWave(overlayStart, dY - 5, dW - (overlayStart - dX), 14, 5, 2);
+                } else {
+                    const segW = dW / 13;
+                    ctx.moveTo(dX + (11 * segW), dY - 5);
+                    for(let i=11; i<14; i++) {
+                        let isHigh = (i % 2 === 0);
+                        let startX = dX + (i * segW) - 2;
+                        let endX = startX + segW;
+                        let cpX = startX + (segW/2);
+                        let cpY = isHigh ? (dY - 5) - 25 : (dY - 5) + 5;
+                        ctx.quadraticCurveTo(cpX, cpY, endX, dY - 5);
+                    }
                 }
                 ctx.stroke();
                 ctx.setLineDash([]);
@@ -759,7 +792,8 @@
                 ctx.beginPath(); ctx.moveTo(dX + dW, dY + 15); ctx.lineTo(dX + dW, dY + 25); ctx.stroke();
                 drawDimH(dX, dX + dW, dY + 20, `Ancho de la Plancha: ${parametros.coberturaAnchoPlancha}m`, "#334155");
 
-                const traslapeX = dX + (11 * segW);
+                const segWBase = esMetal ? (dW / 12) : (dW / 13);
+                const traslapeX = dX + ((esMetal ? 10 : 11) * segWBase);
                 const topCotaY = dY - 35;
                 ctx.beginPath(); ctx.moveTo(traslapeX, topCotaY); ctx.lineTo(dX + dW, topCotaY); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(traslapeX, topCotaY + 5); ctx.lineTo(traslapeX, topCotaY - 5); ctx.stroke();
@@ -891,6 +925,7 @@
             const dragOffsetRef = useRef({ x: 0, y: 0 });
             const dragTimerRef = useRef(null);
             const didDragRef = useRef(false);
+            const [aceptarReajusteCorreas, setAceptarReajusteCorreas] = useState(false);
 
             const previewCaidaRaw = Math.max(0, Number(params.caida) || 0);
             const previewCaida = params.tipoTecho === '2' ? previewCaidaRaw / 2 : previewCaidaRaw;
@@ -967,6 +1002,17 @@
                     return;
                 }
                 calcular();
+            };
+
+            const handleReajustarCorreas = () => {
+                const sugerida = resultados?.parametros?.sepCorreasSugerida;
+                if (!sugerida || !aceptarReajusteCorreas) return;
+                setParams(prev => ({
+                    ...prev,
+                    sepCorreas: String(sugerida)
+                }));
+                setAceptarReajusteCorreas(false);
+                setTimeout(() => calcular(), 50);
             };
 
             useEffect(() => {
@@ -1059,7 +1105,10 @@
                     const anchoUtil = esMetal ? ANCHO_UTIL_METAL : ANCHO_UTIL_TEJA;
                     const anchoPlancha = esMetal ? ANCHO_PLANCHA_METAL : ANCHO_PLANCHA_TEJA;
                     const traslapeOndas = esMetal ? TRASLAPE_ONDAS_METAL : TRASLAPE_ONDAS_TEJA;
-                    const coberturaNombre = esMetal ? "Metalica 6 ondas" : "Teja Espanola";
+                    const coberturaNombre = esMetal ? "Duratecho 6 ondas" : "Teja Espanola";
+                    const tornillosLabel = esMetal
+                        ? "Tornillos autoperforantes 2 1/2 (sin capuchon)"
+                        : "Tornillos + Capuchones";
 
                     const anchoTejas = Math.ceil(vLargo / anchoUtil);
                     const comboTejas = optimizarPlanchas(longitudTotalCaida, planchasDisponibles, traslapeVertical);
@@ -1075,6 +1124,34 @@
                             const posicion = Math.max(0, acumulado - traslapeVertical * (i + 1));
                             cortesPlanchas.push(posicion);
                         }
+                    }
+
+                    const cortesValidos = cortesPlanchas.filter((c) => c > 0.05);
+                    const correaTol = 0.05;
+                    const cortesAlineados = cortesValidos.length === 0
+                        ? true
+                        : cortesValidos.every((c) => Math.abs((c / vSepCorreas) - Math.round(c / vSepCorreas)) <= correaTol);
+                    let sepCorreasSugerida = vSepCorreas;
+                    if (!cortesAlineados && cortesValidos.length > 0) {
+                        const minS = Math.max(0.2, vSepCorreas - 0.3);
+                        const maxS = vSepCorreas + 0.3;
+                        let mejor = null;
+                        for (let s = minS; s <= maxS + 1e-6; s += 0.05) {
+                            const ok = cortesValidos.every((c) => Math.abs((c / s) - Math.round(c / s)) <= correaTol);
+                            if (ok) {
+                                mejor = s;
+                                break;
+                            }
+                        }
+                        if (!mejor) {
+                            const candidatos = cortesValidos.map((c) => {
+                                const n = Math.max(1, Math.round(c / vSepCorreas));
+                                return c / n;
+                            });
+                            const promedio = candidatos.reduce((acc, v) => acc + v, 0) / candidatos.length;
+                            mejor = Math.max(0.2, promedio);
+                        }
+                        sepCorreasSugerida = round2(mejor);
                     }
 
                     const totalPlanchas = Object.values(desgloseTejas).reduce((a, b) => a + b, 0);
@@ -1237,6 +1314,9 @@
                     if (requiereParTensor) {
                         recomendaciones.push("Al no usar columnas centrales en 2 aguas, se aplica sistema par + tensor en 75x75.");
                     }
+                    if (!cortesAlineados) {
+                        recomendaciones.push("Advertencia: hay traslapes en largo que no coinciden con una correa. Se recomienda reajustar la separacion de correas.");
+                    }
 
                     setResultados({
                         desgloseTejas, totalTornillos, tubosColumnas, tubosVigas, tubosCorreas,
@@ -1273,7 +1353,10 @@
                             coberturaTraslapeOndas: traslapeOndas,
                             coberturaTraslapeVertical: traslapeVertical,
                             cortesPlanchas,
-                            planchasCombo: comboTejas
+                            planchasCombo: comboTejas,
+                            tornillosLabel,
+                            cortesAlineados,
+                            sepCorreasSugerida
                         }
                     });
 
@@ -1598,7 +1681,7 @@
                                                 <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${Number(params.largo) > 10 && params.incluirColumnasCentrales ? 'transform translate-x-4' : ''}`}></div>
                                             </div>
                                             <div className="ml-3 text-sm font-semibold text-white">
-                                                Columnas centrales en cumbrera (recomendado > 10m)
+                                                Columnas centrales en cumbrera (recomendado &gt; 10m)
                                             </div>
                                         </label>
                                         {Number(params.largo) > 10 && !params.incluirColumnasCentrales && (
@@ -1835,7 +1918,7 @@
                                                             )}
                                                             <li className="flex justify-between items-center pb-1">
                                                                 <span className="font-medium flex items-center">
-                                                                    Tornillos + Capuchones <br/>
+                                                                    {resultados.parametros.tornillosLabel} <br/>
                                                                     <span className="text-[10px] text-gray-500 ml-1"> (9 p/plancha {resultados.cumbreros > 0 && '+ 4 p/cum'})</span>
                                                                 </span>
                                                                 <span className="font-bold text-blue-900 bg-blue-100 px-2 py-1 rounded">{resultados.totalTornillos} u.</span>
@@ -1869,6 +1952,24 @@
                                                         </ul>
                                                     </div>
                                                 )}
+                                                {!resultados.parametros.cortesAlineados && (
+                                                    <div className="mt-3 border border-blue-200 rounded-md p-3 bg-blue-50">
+                                                        <div className="font-bold text-blue-900 text-xs uppercase mb-2">Reajuste de Correas</div>
+                                                        <div className="text-sm text-blue-900">
+                                                            Separacion sugerida: <span className="font-bold">{resultados.parametros.sepCorreasSugerida} m</span> para alinear traslapes.
+                                                        </div>
+                                                        <label className="mt-2 flex items-center gap-2 text-sm text-blue-900">
+                                                            <input type="checkbox" checked={aceptarReajusteCorreas} onChange={(e) => setAceptarReajusteCorreas(e.target.checked)} />
+                                                            Acepto reajustar correas
+                                                        </label>
+                                                        <button
+                                                            onClick={handleReajustarCorreas}
+                                                            className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded"
+                                                        >
+                                                            Reajustar correas
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1893,7 +1994,7 @@
                                                 </button>
                                             </div>
                                             {activePlanConfig === 'elevacion' && (
-                                                <div className="absolute top-8 right-2 z-10 w-72 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                <div className="absolute top-8 right-2 z-10 w-72 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                     <div className="font-bold text-slate-700 mb-2">Configurar elevacion</div>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <label className="flex flex-col">Caida (m)<input type="number" step="any" name="caida" value={params.caida} onChange={handleChange} className="border rounded px-2 py-1" /></label>
@@ -1943,7 +2044,7 @@
                                                 </button>
                                             </div>
                                             {activePlanConfig === 'planta' && (
-                                                <div className="absolute top-8 right-2 z-10 w-64 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                <div className="absolute top-8 right-2 z-10 w-64 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                     <div className="font-bold text-slate-700 mb-2">Configurar planta</div>
                                                     <label className="flex flex-col mb-2">Sep. largo (m)<input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
                                                     <label className="flex flex-col mb-2">Cant. columnas<input type="number" step="1" min="2" name="numColumnasLargo" value={params.numColumnasLargo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
@@ -1977,7 +2078,7 @@
                                                 </button>
                                             </div>
                                             {activePlanConfig === 'correas' && (
-                                                <div className="absolute top-8 right-2 z-10 w-56 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                <div className="absolute top-8 right-2 z-10 w-56 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                     <div className="font-bold text-slate-700 mb-2">Configurar correas</div>
                                                     <label className="flex flex-col mb-2">Sep. correas (m)<input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="border rounded px-2 py-1" /></label>
                                                     <label className="flex flex-col">Largo (m)<input type="number" step="any" name="largo" value={params.largo} onChange={handleChange} className="border rounded px-2 py-1" /></label>
@@ -2010,7 +2111,7 @@
                                                 </button>
                                             </div>
                                             {activePlanConfig === 'tejas' && (
-                                                <div className="absolute top-8 right-2 z-10 w-60 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                <div className="absolute top-8 right-2 z-10 w-60 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                     <div className="font-bold text-slate-700 mb-2">Configurar tejas</div>
                                                     <label className="flex flex-col mb-2">Tipo cubierta
                                                         <select name="tipoCobertura" value={params.tipoCobertura} onChange={handleChange} className="border rounded px-2 py-1">
@@ -2050,7 +2151,7 @@
                                                     </button>
                                                 </div>
                                                 {activePlanConfig === 'canales' && (
-                                                    <div className="absolute top-8 right-2 z-10 w-52 bg-white/70 backdrop-blur border border-slate-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
+                                                    <div className="absolute top-8 right-2 z-10 w-52 bg-blue-50/40 backdrop-blur border border-blue-200 rounded-md shadow-lg p-3 text-[11px] text-slate-800">
                                                         <div className="font-bold text-slate-700 mb-2">Configurar canales</div>
                                                         <label className="flex items-center gap-2"><input type="checkbox" name="incluirCanales" checked={params.incluirCanales} onChange={handleChange} /> Incluir canales</label>
                                                         <label className="flex flex-col mt-2">Pitones bajantes
@@ -2132,7 +2233,7 @@
                                                         </tr>
                                                     )}
                                                     <tr>
-                                                        <td className="border border-gray-300 px-2 py-1">Tornillos + capuchones</td>
+                                                        <td className="border border-gray-300 px-2 py-1">{resultados.parametros.tornillosLabel}</td>
                                                         <td className="border border-gray-300 px-2 py-1">9 p/plancha + extras cumbrero</td>
                                                         <td className="border border-gray-300 px-2 py-1 text-right">{resultados.totalTornillos}</td>
                                                         <td className="border border-gray-300 px-2 py-1">unid.</td>
