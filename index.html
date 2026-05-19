@@ -544,13 +544,37 @@
                         drawDimV(30, y, y + pasoY, `${parametros.sepCorreas}m`, "#1D4ED8");
                     }
                 }
+                // Divisiones cada 6m de correa y sobrante con cotas
+                const totalLargo = parametros.largo;
+                const maxX = 750;
+                const minX = 50;
+                if (totalLargo > 0) {
+                    const tramo = 6;
+                    const numTramos = Math.floor(totalLargo / tramo);
+                    const tramoUsado = Math.min(tramo, totalLargo);
+                    let lastX = minX;
+
+                    for (let i = 1; i <= numTramos; i++) {
+                        const xCorte = minX + ((i * tramo) / totalLargo) * (maxX - minX);
+                        ctx.strokeStyle = '#64748B'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                        ctx.beginPath(); ctx.moveTo(xCorte, 40); ctx.lineTo(xCorte, 200); ctx.stroke();
+                        ctx.setLineDash([]);
+                        drawDimH(lastX, xCorte, 28, `${round2(tramoUsado)}m`, "#111");
+                        lastX = xCorte;
+                    }
+
+                    const sobrante = round2(totalLargo - (numTramos * tramo));
+                    if (sobrante > 0) {
+                        drawDimH(lastX, maxX, 28, `${sobrante}m`, "#111");
+                    }
+                }
                 if (parametros.tipoTecho === '2') {
                     const yCumbrera = 40 + (160 / 2);
                     ctx.fillStyle = '#EF4444'; ctx.globalAlpha = 0.7; ctx.fillRect(50, yCumbrera - 3, 700, 6); ctx.globalAlpha = 1.0;
                 }
                 drawDimH(50, 750, 225, `Ancho cubierto: ${parametros.largo}m`, "#111");
 
-                drawLabel(110, 16, `Correas: ${parametros.perfilCorrea}`, "#0f172a");
+                drawLabel(110, 10, `Correas: ${parametros.perfilCorrea}`, "#0f172a");
             }, [resultados]);
             return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
         };
@@ -847,6 +871,7 @@
                 dividirColumnasCaida: false,
                 incluirColumnasCentrales1Agua: false,
                 numColumnasCaida: "3",
+                numColumnasLargo: "",
                 incluirColumnasCentrales: true,
                 incluirCanales: true,
                 incluirVigaUnion: false,
@@ -982,9 +1007,12 @@
                     const numFilasColumnasProfundidad = dosAguas
                         ? (incluirColumnasCentrales ? 3 : 2)
                         : (incluirColumnasCentrales ? numColumnasCaidaInput : 2);
-                    const numColumnasPorFila = Math.ceil(vLargo / vSepColumnasLargo) + 1;
+                    const numColumnasLargoInput = Math.max(0, Math.floor(Number(params.numColumnasLargo) || 0));
+                    const numColumnasPorFila = numColumnasLargoInput > 1
+                        ? numColumnasLargoInput
+                        : (Math.ceil(vLargo / vSepColumnasLargo) + 1);
                     const totalColumnasNum = numColumnasPorFila * numFilasColumnasProfundidad;
-                    const sepColumnasUsada = params.dividirColumnasLargo && numColumnasPorFila > 1
+                    const sepColumnasUsada = numColumnasPorFila > 1
                         ? round2(vLargo / (numColumnasPorFila - 1))
                         : vSepColumnasLargo;
 
@@ -1149,6 +1177,7 @@
                             posicionesCaida,
                             alturasCaida,
                             numColumnasCaida: numColumnasCaidaInput,
+                            numColumnasLargo: numColumnasLargoInput,
                             dividirColumnasLargo: params.dividirColumnasLargo,
                             dividirColumnasCaida: params.dividirColumnasCaida,
                             sepColumnasUsada,
@@ -1396,8 +1425,20 @@
                                     3. Detalles Constructivos
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="label-pro">Sep. Columnas en largo (frontal) (m)</label><input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="input-pro" /></div>
+                                    <div>
+                                        <label className="label-pro">Sep. Columnas en largo (frontal) (m)</label>
+                                        <input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="input-pro" />
+                                        <p className="mt-1 text-[11px] text-slate-400">Si define cantidad, se recalcula automaticamente.</p>
+                                    </div>
+                                    <div>
+                                        <label className="label-pro">Cant. columnas en largo</label>
+                                        <input type="number" step="1" min="2" name="numColumnasLargo" value={params.numColumnasLargo} onChange={handleChange} className="input-pro" />
+                                        <p className="mt-1 text-[11px] text-slate-400">Incluye ambos extremos.</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 pt-2">
                                     <div><label className="label-pro">Sep. Correas (m)</label><input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="input-pro" /></div>
+                                    <div></div>
                                 </div>
                                 <div className="pt-2">
                                     <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
