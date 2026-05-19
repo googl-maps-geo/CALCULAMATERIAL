@@ -202,7 +202,7 @@
 
             const sobrantesMap = {};
             detalleTubos.forEach((t) => {
-                if (t.sobrante > 0) {
+                if (t.sobrante >= 1) {
                     const key = round2(t.sobrante).toFixed(2);
                     sobrantesMap[key] = (sobrantesMap[key] || 0) + 1;
                 }
@@ -320,7 +320,7 @@
                 };
 
                 if (parametros.tipoTecho === '1') {
-                    ctx.fillStyle = '#334155';
+                    ctx.fillStyle = '#CBD5E1';
                     ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
                     ctx.beginPath(); ctx.moveTo(140, 50); ctx.lineTo(565, 120); ctx.stroke();
                     const leftTop = { x: 150, y: 50 };
@@ -349,7 +349,7 @@
                     drawDimV(585, 120, 200, `H Min: ${parametros.hBaja}m`, "#333");
                     drawDimH(150, 550, 225, `Caida Base: ${parametros.caida}m`, "#333");
                 } else {
-                    ctx.fillStyle = '#334155';
+                    ctx.fillStyle = '#CBD5E1';
                     ctx.fillRect(150, 120, 15, 80);
                     if (parametros.incluirColumnasCentrales) {
                         ctx.fillRect(400, 50, 15, 150);
@@ -457,9 +457,9 @@
 
                 for (let i = 0; i < numColumnasPorFila; i++) {
                     const x = 50 + ((posiciones[i] / parametros.largo) * 700);
-                    ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 4;
+                    ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 4;
                     ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, 200); ctx.stroke();
-                    ctx.fillStyle = '#000000'; ctx.fillRect(x - 5, 35, 10, 10); ctx.fillRect(x - 5, 195, 10, 10);
+                    ctx.fillStyle = '#64748B'; ctx.fillRect(x - 5, 35, 10, 10); ctx.fillRect(x - 5, 195, 10, 10);
                     if (parametros.incluirColumnasCentrales) ctx.fillRect(x - 5, 115, 10, 10);
 
                     if (i < numColumnasPorFila - 1) {
@@ -480,8 +480,8 @@
                 drawDimH(50, 750, 232, `LARGO TOTAL FRONTAL: ${parametros.largo}m`, "#111");
                 drawDimV(25, 40, 200, `${parametros.caida}m`, "#111");
 
-                drawLabel(120, 14, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
-                drawLabel(300, 30, `Vigas: ${parametros.perfilViga}`, "#0f172a");
+                drawLabel(120, 245, `Columnas: ${parametros.perfilColumna}`, "#0f172a");
+                drawLabel(120, 260, `Vigas: ${parametros.perfilViga}`, "#0f172a");
             }, [resultados]);
             return <canvas ref={canvasRef} className="w-full h-auto bg-white shadow-sm block" style={{maxWidth: '100%'}}></canvas>;
         };
@@ -536,7 +536,7 @@
 
                 for (let i = 0; i < totalCorreasPlano; i++) {
                     const y = 40 + (i * pasoY);
-                    ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#93C5FD'; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(750, y); ctx.stroke();
                     if (i < totalCorreasPlano - 1 && i < 15 && pasoY > 12) {
                         ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = 1;
@@ -1074,8 +1074,13 @@
                         if (item.titulo === "Columnas") {
                             recoveryUnit = Math.min(...item.piezas);
                         }
-                        const stockRecuperables = Math.floor(plan.totalSobrante / recoveryUnit);
-                        const sobranteRestante = round2(plan.totalSobrante - (stockRecuperables * recoveryUnit));
+                        const reusableSobrante = round2(
+                            plan.detalleTubos
+                                .filter((t) => t.sobrante >= 1)
+                                .reduce((acc, t) => acc + t.sobrante, 0)
+                        );
+                        const stockRecuperables = Math.floor(reusableSobrante / recoveryUnit);
+                        const sobranteRestante = round2(reusableSobrante - (stockRecuperables * recoveryUnit));
                         return {
                             ...item,
                             recoveryUnit,
@@ -1097,7 +1102,7 @@
                     const tubosCorreas = planCorreas ? planCorreas.plan.totalTubos : 0;
                     const tubosVigaUnionPlan = planVigaUnion ? planVigaUnion.plan.totalTubos : tubosVigaUnion;
                     const tubosColumnasConSobrantes = planColumnas
-                        ? planColumnas.plan.totalTubos
+                        ? Math.max(0, planColumnas.plan.totalTubos - planColumnas.stockRecuperables)
                         : tubosColumnas;
                     const tubosCorreasConSobrantes = planCorreas
                         ? Math.max(0, planCorreas.plan.totalTubos - planCorreas.stockRecuperables)
@@ -1564,14 +1569,16 @@
                                                                 <div className="text-slate-700">
                                                                     {item.titulo === "Correas"
                                                                         ? `Correas de 6m (con sobrantes): ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
-                                                                        : `Tubos de 6m: ${item.plan.totalTubos} u.`}
+                                                                        : (item.titulo === "Columnas"
+                                                                            ? `Tubos de 6m (con sobrantes): ${Math.max(0, item.plan.totalTubos - item.stockRecuperables)} u.`
+                                                                            : `Tubos de 6m: ${item.plan.totalTubos} u.`)}
                                                                 </div>
                                                                 {item.plan.unionesNecesarias > 0 && (
                                                                     <div className="text-slate-700">Uniones necesarias: {item.plan.unionesNecesarias} (solo {item.perfil})</div>
                                                                 )}
                                                                 <div className="mt-1 text-slate-700">
                                                                     {(() => {
-                                                                        const netCount = item.titulo === "Correas"
+                                                                        const netCount = (item.titulo === "Correas" || item.titulo === "Columnas")
                                                                             ? Math.max(0, item.plan.totalTubos - item.stockRecuperables)
                                                                             : item.plan.totalTubos;
                                                                         return item.plan.detalleTubos.slice(0, netCount).map((t, tIdx) => (
@@ -1758,7 +1765,7 @@
 
                                         {/* HOJA FINAL (Detalle tipo Excel) */}
                                         <div className="evitar-corte border border-gray-300 rounded p-4 shadow-sm bg-white mb-6" style={{ pageBreakInside: 'avoid' }}>
-                                            <h4 className="font-bold text-gray-800 text-xs mb-3 uppercase">Detalle Final de Materiales (Tipo Excel)</h4>
+                                            <h4 className="font-bold text-gray-800 text-xs mb-3 uppercase">Detalle Final de Materiales</h4>
                                             <table className="w-full text-[11px] text-gray-800 border border-gray-300">
                                                 <thead className="bg-gray-100">
                                                     <tr>
@@ -1772,7 +1779,7 @@
                                                     <tr>
                                                         <td className="border border-gray-300 px-2 py-1">Columnas</td>
                                                         <td className="border border-gray-300 px-2 py-1">{resultados.parametros.perfilColumna}</td>
-                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosColumnas}</td>
+                                                        <td className="border border-gray-300 px-2 py-1 text-right">{resultados.tubosColumnasConSobrantes}</td>
                                                         <td className="border border-gray-300 px-2 py-1">tubos de 6m</td>
                                                     </tr>
                                                     <tr>
