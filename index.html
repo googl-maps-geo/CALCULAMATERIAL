@@ -1134,12 +1134,16 @@
                 const originalScrollY = scrollContainer ? scrollContainer.scrollTop : 0;
                 const originalScrollX = scrollXContainer ? scrollXContainer.scrollLeft : 0;
                 const originalWindowY = window.scrollY;
+                const originalJustify = scrollXContainer ? scrollXContainer.style.justifyContent : "";
+                const originalAlign = scrollXContainer ? scrollXContainer.style.alignItems : "";
 
                 // 3. Forzamos todas las barras de desplazamiento estrictamente al tope y a la izquierda (0,0).
                 // Esto garantiza que la camara (html2canvas) tome el borde izquierdo real del reporte.
                 if (scrollContainer) scrollContainer.scrollTop = 0;
                 if (scrollXContainer) {
                     scrollXContainer.scrollLeft = 0;
+                    scrollXContainer.style.justifyContent = "flex-start";
+                    scrollXContainer.style.alignItems = "flex-start";
                 }
                 window.scrollTo(0, 0);
 
@@ -1197,7 +1201,11 @@
                 // 5. Generamos el PDF y restauramos el scroll a donde estaba el usuario.
                 html2pdf().set(opt).from(element).save().then(() => {
                     if (scrollContainer) scrollContainer.scrollTop = originalScrollY;
-                    if (scrollXContainer) scrollXContainer.scrollLeft = originalScrollX;
+                    if (scrollXContainer) {
+                        scrollXContainer.scrollLeft = originalScrollX;
+                        scrollXContainer.style.justifyContent = originalJustify;
+                        scrollXContainer.style.alignItems = originalAlign;
+                    }
                     window.scrollTo(0, originalWindowY);
                     if (reportEl) {
                         reportEl.classList.remove('pdf-exporting');
