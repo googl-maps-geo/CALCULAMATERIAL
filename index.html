@@ -323,6 +323,14 @@
                     ctx.fillStyle = '#334155'; ctx.fillRect(150, 50, 15, 150); ctx.fillRect(550, 120, 15, 80);
                     ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
                     ctx.beginPath(); ctx.moveTo(140, 50); ctx.lineTo(565, 120); ctx.stroke();
+                    if (parametros.incluirColumnasCentrales && parametros.caida > 0) {
+                        const ratio = Math.max(0, Math.min(1, (parametros.posColumnaCentral || 0) / parametros.caida));
+                        const colX = 150 + ((550 - 150) * ratio);
+                        const colY = 50 + ((120 - 50) * ratio);
+                        ctx.fillStyle = '#334155';
+                        ctx.fillRect(colX - 7, colY, 15, 200 - colY);
+                        drawLeaderDown(colX, colY, colX + 14, colY - 18, `Columna: ${parametros.alturaColumnaCentral}m`, "#0f172a");
+                    }
                     if (parametros.volado > 0) {
                         ctx.strokeStyle = '#EA580C'; ctx.beginPath(); ctx.moveTo(565, 120); ctx.lineTo(620, 133); ctx.stroke();
                         drawLeaderDown(620, 133, 640, 105, `Volado: ${parametros.volado}m`, "#EA580C");
@@ -824,6 +832,8 @@
                 sepCorreas: "0.8",
                 tipoTecho: "1",
                 tipoCobertura: "teja",
+                incluirColumnasCentrales1Agua: false,
+                posColumnaCentral: "4",
                 incluirColumnasCentrales: true,
                 incluirCanales: true,
                 dividirColumnas: false,
@@ -893,13 +903,21 @@
                     const vSepCorreas = Math.max(0.1, Number(params.sepCorreas) || 0.8);
 
                     const dosAguas = params.tipoTecho === '2';
-                    const incluirColumnasCentrales = dosAguas && params.incluirColumnasCentrales && vLargo > 10;
+                    const incluirColumnasCentrales = dosAguas
+                        ? (params.incluirColumnasCentrales && vLargo > 10)
+                        : params.incluirColumnasCentrales1Agua;
                     const requiereParTensor = dosAguas && !incluirColumnasCentrales;
 
                     const vCaidaPorLado = dosAguas ? vCaida / 2 : vCaida;
                     if (params.usarPendienteAuto) {
                         vHAlta = Math.max(vHBaja, vHBaja + (vCaidaPorLado * vPendiente / 100));
                     }
+
+                    const vPosColumnaCentral = Math.max(0, Math.min(vCaidaPorLado, Number(params.posColumnaCentral) || (vCaidaPorLado / 2)));
+                    const pendienteLineal = vCaidaPorLado > 0 ? (vHAlta - vHBaja) / vCaidaPorLado : 0;
+                    const alturaColumnaCentral = (!dosAguas && incluirColumnasCentrales)
+                        ? round2(vHBaja + (vPosColumnaCentral * pendienteLineal))
+                        : 0;
 
                     const longitudInclinada = vCaidaPorLado;
                     const longitudTotalCaida = longitudInclinada + vVolado;
@@ -934,9 +952,7 @@
                     let tornillosExtraCumbreros = cumbreros * 4;
                     const totalTornillos = (totalPlanchas * 9) + tornillosExtraCumbreros;
 
-                    const numFilasColumnasProfundidad = dosAguas
-                        ? (incluirColumnasCentrales ? 3 : 2)
-                        : 2;
+                    const numFilasColumnasProfundidad = incluirColumnasCentrales ? 3 : 2;
                     const numColumnasPorFila = Math.ceil(vLargo / vSepColumnas) + 1;
                     const totalColumnasNum = numColumnasPorFila * numFilasColumnasProfundidad;
                     const sepColumnasUsada = params.dividirColumnas && numColumnasPorFila > 1
@@ -946,6 +962,9 @@
                     let metrosLinealesColumnas = dosAguas
                         ? (numColumnasPorFila * vHBaja * 2) + (incluirColumnasCentrales ? (numColumnasPorFila * vHAlta) : 0)
                         : (numColumnasPorFila * vHBaja) + (numColumnasPorFila * vHAlta);
+                    if (!dosAguas && incluirColumnasCentrales) {
+                        metrosLinealesColumnas += (numColumnasPorFila * alturaColumnaCentral);
+                    }
 
                     const perfilVigaFinal = requiereParTensor
                         ? "Tubo 75x75 en 2mm (par + tensor)"
@@ -981,6 +1000,9 @@
                     } else {
                         for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHBaja);
                         for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
+                        if (incluirColumnasCentrales) {
+                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(alturaColumnaCentral);
+                        }
                     }
 
                     const piezasVigas = [];
@@ -1093,6 +1115,8 @@
                             sepColumnas: vSepColumnas, sepCorreas: vSepCorreas,
                             tipoTecho: params.tipoTecho, incluirCanales: params.incluirCanales,
                             incluirColumnasCentrales,
+                            posColumnaCentral: vPosColumnaCentral,
+                            alturaColumnaCentral,
                             dividirColumnas: params.dividirColumnas,
                             sepColumnasUsada,
                             pendientePercent: vPendiente, usarPendienteAuto: params.usarPendienteAuto,
@@ -1169,18 +1193,18 @@
                     prevPosition = reportEl.style.position || "";
                     prevLeft = reportEl.style.left || "";
                     reportEl.classList.add('pdf-exporting');
-                    reportEl.style.transform = "none";
+                    reportEl.style.transform = "translateX(-6px)";
                     reportEl.style.width = "800px";
                     reportEl.style.height = "auto";
                     reportEl.style.overflow = "visible";
-                    reportEl.style.marginLeft = "auto";
+                    reportEl.style.marginLeft = "0";
                     reportEl.style.marginRight = "auto";
                     reportEl.style.position = "relative";
                     reportEl.style.left = "0";
                 }
 
                 const opt = {
-                    margin:       isMobile ? [6, 8, 6, 8] : [10, 10, 10, 10],
+                    margin:       isMobile ? [6, 4, 6, 10] : [10, 6, 10, 12],
                     filename:     'Cotizacion_Canvas_UP_CONS.pdf',
                     image:        { type: 'jpeg', quality: 1 },
                     html2canvas:  {
@@ -1371,6 +1395,25 @@
                                         </div>
                                     )}
                                 </div>
+                                {params.tipoTecho === '1' && (
+                                    <div className="pt-2 space-y-3">
+                                        <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
+                                            <div className="relative">
+                                                <input type="checkbox" name="incluirColumnasCentrales1Agua" checked={params.incluirColumnasCentrales1Agua} onChange={handleChange} className="sr-only" />
+                                                <div className={`block w-10 h-6 rounded-full transition-colors ${params.incluirColumnasCentrales1Agua ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.incluirColumnasCentrales1Agua ? 'transform translate-x-4' : ''}`}></div>
+                                            </div>
+                                            <div className="ml-3 text-sm font-semibold text-white">Columnas centrales en profundidad (1 agua)</div>
+                                        </label>
+                                        {params.incluirColumnasCentrales1Agua && (
+                                            <div>
+                                                <label className="label-pro">Posicion columna central desde alero bajo (m)</label>
+                                                <input type="number" step="any" name="posColumnaCentral" value={params.posColumnaCentral} onChange={handleChange} className="input-pro" />
+                                                <p className="mt-1 text-[11px] text-slate-400">Use una medida entre 0 y la caida.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {params.tipoTecho === '2' && (
                                     <div className="pt-2">
                                         <label className={`flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border transition-colors ${Number(params.largo) > 10 ? 'border-slate-700 hover:border-blue-500' : 'border-slate-700 opacity-60 cursor-not-allowed'}`}>
