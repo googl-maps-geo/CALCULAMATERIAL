@@ -320,22 +320,26 @@
                 };
 
                 if (parametros.tipoTecho === '1') {
-                    ctx.fillStyle = '#334155'; ctx.fillRect(150, 50, 15, 150); ctx.fillRect(550, 120, 15, 80);
+                    ctx.fillStyle = '#334155';
                     ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 5;
                     ctx.beginPath(); ctx.moveTo(140, 50); ctx.lineTo(565, 120); ctx.stroke();
                     const leftTop = { x: 150, y: 50 };
                     const rightTop = { x: 550, y: 120 };
-                    if (parametros.incluirColumnasCentrales && parametros.caida > 0) {
-                        const ratio = Math.max(0, Math.min(1, (parametros.posColumnaCentral || 0) / parametros.caida));
+                    const posiciones = Array.isArray(parametros.posicionesCaida) && parametros.posicionesCaida.length > 0
+                        ? parametros.posicionesCaida
+                        : [0, parametros.caida];
+                    const puntos = posiciones.map((pos) => {
+                        const ratio = Math.max(0, Math.min(1, pos / (parametros.caida || 1)));
                         const colX = 150 + ((550 - 150) * ratio);
                         const colY = 50 + ((120 - 50) * ratio);
-                        ctx.fillStyle = '#334155';
                         ctx.fillRect(colX - 7, colY, 15, 200 - colY);
-                        drawLeaderDown(colX, colY, colX + 14, colY - 18, `Columna: ${parametros.alturaColumnaCentral}m`, "#0f172a");
-                        drawDimSlope(leftTop.x, leftTop.y, colX, colY, `${round2(parametros.posColumnaCentral)}m`, "#111");
-                        drawDimSlope(colX, colY, rightTop.x, rightTop.y, `${round2(parametros.caida - parametros.posColumnaCentral)}m`, "#111");
-                    } else {
-                        drawDimSlope(leftTop.x, leftTop.y, rightTop.x, rightTop.y, `${round2(parametros.caida)}m`, "#111");
+                        return { x: colX, y: colY, pos };
+                    });
+                    if (puntos.length > 1) {
+                        for (let i = 0; i < puntos.length - 1; i++) {
+                            const dist = round2(puntos[i + 1].pos - puntos[i].pos);
+                            drawDimSlope(puntos[i].x, puntos[i].y, puntos[i + 1].x, puntos[i + 1].y, `${dist}m`, "#111");
+                        }
                     }
                     if (parametros.volado > 0) {
                         ctx.strokeStyle = '#EA580C'; ctx.beginPath(); ctx.moveTo(565, 120); ctx.lineTo(620, 133); ctx.stroke();
@@ -842,6 +846,7 @@
                 dividirColumnasLargo: false,
                 dividirColumnasCaida: false,
                 incluirColumnasCentrales1Agua: false,
+                numColumnasCaida: "3",
                 incluirColumnasCentrales: true,
                 incluirCanales: true,
                 incluirVigaUnion: false,
@@ -921,14 +926,25 @@
                         vHAlta = Math.max(vHBaja, vHBaja + (vCaidaPorLado * vPendiente / 100));
                     }
 
-                    const basePosCaida = vSepColumnasCaida > 0 ? vSepColumnasCaida : (vCaidaPorLado / 2);
-                    const vPosColumnaCentral = (!dosAguas && incluirColumnasCentrales)
-                        ? (params.dividirColumnasCaida ? round2(vCaidaPorLado / 2) : Math.max(0, Math.min(vCaidaPorLado, basePosCaida)))
-                        : 0;
                     const pendienteLineal = vCaidaPorLado > 0 ? (vHAlta - vHBaja) / vCaidaPorLado : 0;
-                    const alturaColumnaCentral = (!dosAguas && incluirColumnasCentrales)
-                        ? round2(vHBaja + (vPosColumnaCentral * pendienteLineal))
-                        : 0;
+                    const numColumnasCaidaInput = Math.max(2, Math.floor(Number(params.numColumnasCaida) || 2));
+                    let posicionesCaida = [];
+                    if (!dosAguas) {
+                        const filas = incluirColumnasCentrales ? numColumnasCaidaInput : 2;
+                        const tramos = Math.max(1, filas - 1);
+                        let paso = params.dividirColumnasCaida
+                            ? (vCaidaPorLado / tramos)
+                            : vSepColumnasCaida;
+                        if (paso * tramos > vCaidaPorLado) {
+                            paso = vCaidaPorLado / tramos;
+                        }
+                        posicionesCaida = Array.from({ length: filas }, (_, i) => round2(i * paso));
+                        posicionesCaida[0] = 0;
+                        posicionesCaida[filas - 1] = round2(vCaidaPorLado);
+                    } else {
+                        posicionesCaida = [0, round2(vCaidaPorLado)];
+                    }
+                    const alturasCaida = posicionesCaida.map((pos) => round2(vHBaja + (pos * pendienteLineal)));
 
                     const longitudInclinada = vCaidaPorLado;
                     const longitudTotalCaida = longitudInclinada + vVolado;
@@ -963,7 +979,9 @@
                     let tornillosExtraCumbreros = cumbreros * 4;
                     const totalTornillos = (totalPlanchas * 9) + tornillosExtraCumbreros;
 
-                    const numFilasColumnasProfundidad = incluirColumnasCentrales ? 3 : 2;
+                    const numFilasColumnasProfundidad = dosAguas
+                        ? (incluirColumnasCentrales ? 3 : 2)
+                        : (incluirColumnasCentrales ? numColumnasCaidaInput : 2);
                     const numColumnasPorFila = Math.ceil(vLargo / vSepColumnasLargo) + 1;
                     const totalColumnasNum = numColumnasPorFila * numFilasColumnasProfundidad;
                     const sepColumnasUsada = params.dividirColumnasLargo && numColumnasPorFila > 1
@@ -972,10 +990,7 @@
 
                     let metrosLinealesColumnas = dosAguas
                         ? (numColumnasPorFila * vHBaja * 2) + (incluirColumnasCentrales ? (numColumnasPorFila * vHAlta) : 0)
-                        : (numColumnasPorFila * vHBaja) + (numColumnasPorFila * vHAlta);
-                    if (!dosAguas && incluirColumnasCentrales) {
-                        metrosLinealesColumnas += (numColumnasPorFila * alturaColumnaCentral);
-                    }
+                        : (numColumnasPorFila * alturasCaida.reduce((acc, h) => acc + h, 0));
 
                     const perfilVigaFinal = requiereParTensor
                         ? "Tubo 75x75 en 2mm (par + tensor)"
@@ -1009,11 +1024,9 @@
                             for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
                         }
                     } else {
-                        for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHBaja);
-                        for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(vHAlta);
-                        if (incluirColumnasCentrales) {
-                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(alturaColumnaCentral);
-                        }
+                        alturasCaida.forEach((altura) => {
+                            for (let i = 0; i < numColumnasPorFila; i++) piezasColumnas.push(altura);
+                        });
                     }
 
                     const piezasVigas = [];
@@ -1128,8 +1141,9 @@
                             sepCorreas: vSepCorreas,
                             tipoTecho: params.tipoTecho, incluirCanales: params.incluirCanales,
                             incluirColumnasCentrales,
-                            posColumnaCentral: vPosColumnaCentral,
-                            alturaColumnaCentral,
+                            posicionesCaida,
+                            alturasCaida,
+                            numColumnasCaida: numColumnasCaidaInput,
                             dividirColumnasLargo: params.dividirColumnasLargo,
                             dividirColumnasCaida: params.dividirColumnasCaida,
                             sepColumnasUsada,
@@ -1377,7 +1391,7 @@
                                     3. Detalles Constructivos
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="label-pro">Sep. Columnas en largo (m)</label><input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="input-pro" /></div>
+                                    <div><label className="label-pro">Sep. Columnas en largo (frontal) (m)</label><input type="number" step="any" name="sepColumnasLargo" value={params.sepColumnasLargo} onChange={handleChange} className="input-pro" /></div>
                                     <div><label className="label-pro">Sep. Correas (m)</label><input type="number" step="any" name="sepCorreas" value={params.sepCorreas} onChange={handleChange} className="input-pro" /></div>
                                 </div>
                                 <div className="pt-2">
@@ -1387,7 +1401,7 @@
                                             <div className={`block w-10 h-6 rounded-full transition-colors ${params.dividirColumnasLargo ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
                                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.dividirColumnasLargo ? 'transform translate-x-4' : ''}`}></div>
                                         </div>
-                                        <div className="ml-3 text-sm font-semibold text-white">Dividir columnas en largo (tramos iguales)</div>
+                                        <div className="ml-3 text-sm font-semibold text-white">Dividir columnas en largo (frontal)</div>
                                     </label>
                                 </div>
                                 <div className="pt-2 space-y-3">
@@ -1417,13 +1431,16 @@
                                                 <div className={`block w-10 h-6 rounded-full transition-colors ${params.incluirColumnasCentrales1Agua ? 'bg-blue-600' : 'bg-slate-600'}`}></div>
                                                 <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${params.incluirColumnasCentrales1Agua ? 'transform translate-x-4' : ''}`}></div>
                                             </div>
-                                            <div className="ml-3 text-sm font-semibold text-white">Columnas centrales en profundidad (1 agua)</div>
+                                            <div className="ml-3 text-sm font-semibold text-white">Columnas en caida (ancho) (1 agua)</div>
                                         </label>
                                         {params.incluirColumnasCentrales1Agua && (
                                             <div>
+                                                <label className="label-pro">Cantidad de columnas en caida</label>
+                                                <input type="number" step="1" min="2" name="numColumnasCaida" value={params.numColumnasCaida} onChange={handleChange} className="input-pro" />
+                                                <p className="mt-1 text-[11px] text-slate-400">Incluye alero bajo y alero alto.</p>
                                                 <label className="label-pro">Sep. Columnas en caida (m)</label>
                                                 <input type="number" step="any" name="sepColumnasCaida" value={params.sepColumnasCaida} onChange={handleChange} className="input-pro" />
-                                                <p className="mt-1 text-[11px] text-slate-400">Distancia desde alero bajo hasta la columna central.</p>
+                                                <p className="mt-1 text-[11px] text-slate-400">Si no divide, esta es la distancia entre columnas; el sobrante queda al final.</p>
                                                 <div className="pt-2">
                                                     <label className="flex items-center cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-blue-500 transition-colors">
                                                         <div className="relative">
