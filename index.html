@@ -884,7 +884,7 @@
                 perfilCorrea: "Correa Tipo G 80x40 en 2mm"
             });
             const [activePlanConfig, setActivePlanConfig] = useState(null);
-            const [floatingPos, setFloatingPos] = useState({ x: 0, y: 0 });
+            const [floatingPos, setFloatingPos] = useState(null);
             const [isDragging, setIsDragging] = useState(false);
             const dragOffsetRef = useRef({ x: 0, y: 0 });
             const dragTimerRef = useRef(null);
@@ -965,12 +965,24 @@
             };
 
             useEffect(() => {
+                if (floatingPos) return;
+                const size = 56;
+                setFloatingPos({
+                    x: Math.max(0, (window.innerWidth / 2) - (size / 2)),
+                    y: Math.max(0, (window.innerHeight / 2) - (size / 2))
+                });
+            }, [floatingPos]);
+
+            useEffect(() => {
                 if (!isDragging) return;
                 const handleMove = (e) => {
+                    const size = 56;
+                    const maxX = Math.max(0, window.innerWidth - size);
+                    const maxY = Math.max(0, window.innerHeight - size);
                     didDragRef.current = true;
                     setFloatingPos({
-                        x: e.clientX - dragOffsetRef.current.x,
-                        y: e.clientY - dragOffsetRef.current.y
+                        x: Math.min(maxX, Math.max(0, e.clientX - dragOffsetRef.current.x)),
+                        y: Math.min(maxY, Math.max(0, e.clientY - dragOffsetRef.current.y))
                     });
                 };
                 const handleUp = () => {
@@ -1610,8 +1622,8 @@
                     <div
                         className="fixed z-40 pointer-events-none"
                         style={{
-                            top: `calc(50% + ${floatingPos.y}px)`,
-                            left: `calc(50% + ${floatingPos.x}px)`
+                            top: `${(floatingPos || { y: 0 }).y}px`,
+                            left: `${(floatingPos || { x: 0 }).x}px`
                         }}
                     >
                         <button
